@@ -993,8 +993,7 @@ fn build_report(
 
     let last_frame_views = records
         .last()
-        .map(|record| record.views.iter().map(view_draw).collect())
-        .unwrap_or_default();
+        .map_or_default(|record| record.views.iter().map(view_draw).collect());
     let skip = samples.len().saturating_sub(frame_limit);
     FrameReport {
         after_frame_count,
@@ -1112,7 +1111,7 @@ mod tests {
 
         let tree = state.tree();
         assert!(tree.nodes.is_empty());
-        assert!(tree.roots.is_empty());
+        assert_eq!(tree.roots, Vec::<String>::new());
         assert!(
             tree.diagnostics
                 .iter()

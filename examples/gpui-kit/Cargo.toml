@@ -2,7 +2,7 @@
 name = "gpui-mcp-kit-demo"
 version = "0.1.0"
 edition = "2024"
-rust-version = "1.96"
+rust-version = "1.100"
 license = "Apache-2.0"
 publish = false
 
@@ -12,11 +12,11 @@ publish = false
 resolver = "3"
 
 [dependencies]
-gpui-kit = "=0.8.0"
+gpui-kit = "=0.10.0"
 gpui-mcp = { path = "../../crates/gpui-mcp", default-features = false, features = ["gpui-pre"] }
 
 [dev-dependencies]
-gpui-kit = { version = "=0.8.0", features = ["test-support"] }
+gpui-kit = { version = "=0.10.0", features = ["test-support"] }
 gpui-mcp = { path = "../../crates/gpui-mcp", default-features = false, features = ["gpui-pre", "test-support"] }
 
 [patch.crates-io]
