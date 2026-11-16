@@ -1,6 +1,6 @@
 use gpui::{
-    App, Keystroke, Modifiers, MouseButton as GpuiMouseButton, MouseDownEvent, MouseMoveEvent,
-    MouseUpEvent, PlatformInput, ScrollDelta, ScrollWheelEvent, TouchPhase, Window, point, px,
+    App, InputEvent, Keystroke, Modifiers, MouseButton as GpuiMouseButton, MouseDownEvent,
+    MouseMoveEvent, MouseUpEvent, PlatformInput, ScrollDelta, TouchPhase, Window, point, px,
 };
 use gpui_mcp_protocol::{
     BridgeError, ErrorCode, InputCommand, MAX_KEY_SEQUENCE, MAX_TEXT_BYTES, MouseButton, Point,
@@ -92,9 +92,9 @@ pub(crate) fn dispatch_pointer(
         PointerCommand::ScrollWheel {
             point: position,
             delta,
-        } => PlatformInput::ScrollWheel(ScrollWheelEvent {
-            position: native_point(*position),
-            delta: match delta {
+        } => scroll_event(
+            native_point(*position),
+            match delta {
                 PointerScrollDelta::Pixels { delta_x, delta_y } => {
                     ScrollDelta::Pixels(point(px(*delta_x), px(*delta_y)))
                 }
@@ -102,9 +102,7 @@ pub(crate) fn dispatch_pointer(
                     ScrollDelta::Lines(point(*delta_x, *delta_y))
                 }
             },
-            modifiers: Modifiers::default(),
-            touch_phase: TouchPhase::Moved,
-        }),
+        ),
     };
     window.dispatch_event(event, cx);
     Ok(())
@@ -156,6 +154,21 @@ fn require_input_handler(available: bool, message: &'static str) -> Result<(), B
         return Err(BridgeError::new(ErrorCode::Unsupported, message));
     }
     Ok(())
+}
+
+/// A moved wheel scroll. gpui-pre 0.3.10 renamed `ScrollWheelEvent` to
+/// `ScrollEvent`, keeping the old name as a deprecated alias, and added its
+/// `source`; the old name and the default source work with every supported GPUI.
+#[allow(deprecated, clippy::needless_update)]
+fn scroll_event(position: gpui::Point<gpui::Pixels>, delta: ScrollDelta) -> PlatformInput {
+    gpui::ScrollWheelEvent {
+        position,
+        delta,
+        modifiers: Modifiers::default(),
+        touch_phase: TouchPhase::Moved,
+        ..Default::default()
+    }
+    .to_platform_input()
 }
 
 fn native_point(position: Point) -> gpui::Point<gpui::Pixels> {

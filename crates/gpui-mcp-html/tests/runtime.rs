@@ -4,9 +4,9 @@ use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 
 use gpui::{
-    App, Context, IntoElement, Modifiers, MouseButton, MouseDownEvent, MouseMoveEvent,
-    MouseUpEvent, PlatformInput, Render, ScrollDelta, ScrollWheelEvent, Styled as _,
-    TestAppContext, TouchPhase, Window, div, point, px, size,
+    App, Context, InputEvent as _, IntoElement, Modifiers, MouseButton, MouseDownEvent,
+    MouseMoveEvent, MouseUpEvent, PlatformInput, Render, ScrollDelta, Styled as _, TestAppContext,
+    TouchPhase, Window, div, point, px, size,
 };
 use gpui_mcp::{Automation, NodeAction, Role, UiTree, ValueInfo};
 use gpui_mcp_html::{
@@ -315,12 +315,10 @@ fn dispatch_pointer_test_input(
         }
         TestInput::Scroll { delta_x, delta_y } => {
             window.dispatch_event(
-                PlatformInput::ScrollWheel(ScrollWheelEvent {
-                    position: center,
-                    delta: ScrollDelta::Pixels(point(px(-*delta_x), px(-*delta_y))),
-                    modifiers: Modifiers::default(),
-                    touch_phase: TouchPhase::Moved,
-                }),
+                scroll_event(
+                    center,
+                    ScrollDelta::Pixels(point(px(-*delta_x), px(-*delta_y))),
+                ),
                 cx,
             );
         }
@@ -1011,4 +1009,19 @@ fn embedded_component_height_tracks_its_flex_host(cx: &mut TestAppContext) {
             Some(expected_canvas_height)
         );
     }
+}
+
+/// A moved wheel scroll. gpui-pre 0.3.10 renamed `ScrollWheelEvent` to
+/// `ScrollEvent`, keeping the old name as a deprecated alias, and added its
+/// `source`; the old name and the default source work with every backend.
+#[allow(deprecated, clippy::needless_update)]
+fn scroll_event(position: gpui::Point<gpui::Pixels>, delta: ScrollDelta) -> PlatformInput {
+    gpui::ScrollWheelEvent {
+        position,
+        delta,
+        modifiers: Modifiers::default(),
+        touch_phase: TouchPhase::Moved,
+        ..Default::default()
+    }
+    .to_platform_input()
 }
