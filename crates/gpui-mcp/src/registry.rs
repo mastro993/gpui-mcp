@@ -1112,7 +1112,7 @@ mod tests {
 
         let tree = state.tree();
         assert!(tree.nodes.is_empty());
-        assert!(tree.roots.is_empty());
+        assert_eq!(tree.roots, Vec::<String>::new());
         assert!(
             tree.diagnostics
                 .iter()

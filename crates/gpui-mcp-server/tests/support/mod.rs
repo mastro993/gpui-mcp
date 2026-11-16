@@ -81,6 +81,7 @@ mod tests {
         trees: usize,
     }
     impl FixtureClient for DelayedTree {
+        #[allow(clippy::unused_async_trait_impl)]
         async fn call_json(&mut self, tool: &str, _: Value) -> Result<Value, String> {
             if tool == "list_apps" {
                 return Ok(json!({ "count": 1 }));

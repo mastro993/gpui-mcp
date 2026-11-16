@@ -820,6 +820,8 @@ impl CacheHints for ReadResourceResult {
     }
 }
 
+// rmcp's handler methods are async, including those that answer at once.
+#[allow(clippy::unused_async_trait_impl)]
 #[tool_handler(router = self.tool_router)]
 impl ServerHandler for GpuiMcp {
     fn get_info(&self) -> ServerInfo {
