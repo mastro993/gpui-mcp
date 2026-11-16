@@ -993,8 +993,7 @@ fn build_report(
 
     let last_frame_views = records
         .last()
-        .map(|record| record.views.iter().map(view_draw).collect())
-        .unwrap_or_default();
+        .map_or_default(|record| record.views.iter().map(view_draw).collect());
     let skip = samples.len().saturating_sub(frame_limit);
     FrameReport {
         after_frame_count,

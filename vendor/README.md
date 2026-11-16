@@ -101,8 +101,6 @@ workspace `Cargo.toml` doesn't match its `.json` file.
 - On Linux it does the same against patched `gpui-pre` 0.3.5 to 0.3.11, and
   against `gpui-pre` 0.3.12 and `gpui-ce` 0.2.2 without the font patch.
 - The Kit demo builds and passes its tests.
-- The bridge builds and passes its tests on Rust 1.95, the oldest version it
-  supports.
 - Fresh apps that install the bridge from the pushed Git commit build, one for
   GPUI Kit and one for `gpui-ce`. In each, the app's GPUI crates and the bridge
   must share a single patched GPUI.
