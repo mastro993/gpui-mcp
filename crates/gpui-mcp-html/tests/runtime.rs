@@ -7,9 +7,9 @@ use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 
 use gpui::{
-    App, Context, IntoElement, Modifiers, MouseButton, MouseDownEvent, MouseMoveEvent,
-    MouseUpEvent, PlatformInput, Render, ScrollDelta, ScrollWheelEvent, Styled as _,
-    TestAppContext, TouchPhase, Window, div, point, px, size,
+    App, Context, InputEvent as _, IntoElement, Modifiers, MouseButton, MouseDownEvent,
+    MouseMoveEvent, MouseUpEvent, PlatformInput, Render, ScrollDelta, Styled as _, TestAppContext,
+    TouchPhase, Window, div, point, px, size,
 };
 use gpui_mcp::{Automation, NodeAction, Role, UiTree, ValueInfo};
 use gpui_mcp_html::{
@@ -318,12 +318,10 @@ fn dispatch_pointer_test_input(
         }
         TestInput::Scroll { delta_x, delta_y } => {
             window.dispatch_event(
-                PlatformInput::ScrollWheel(ScrollWheelEvent {
-                    position: center,
-                    delta: ScrollDelta::Pixels(point(px(-*delta_x), px(-*delta_y))),
-                    modifiers: Modifiers::default(),
-                    touch_phase: TouchPhase::Moved,
-                }),
+                scroll_event(
+                    center,
+                    ScrollDelta::Pixels(point(px(-*delta_x), px(-*delta_y))),
+                ),
                 cx,
             );
         }
@@ -1575,4 +1573,19 @@ fn duplicate_and_missing_names_do_not_break_transitions(cx: &mut TestAppContext)
     next_frame(visual, std::time::Duration::from_millis(16));
     assert!(!view.read_with(visual, |view, _| view.live.view_transition_running()));
     assert_close(bounds_of(&automation, "a").width, 50.0, "settled");
+}
+
+/// A moved wheel scroll. gpui-pre 0.3.10 renamed `ScrollWheelEvent` to
+/// `ScrollEvent`, keeping the old name as a deprecated alias, and added its
+/// `source`; the old name and the default source work with every backend.
+#[allow(deprecated, clippy::needless_update)]
+fn scroll_event(position: gpui::Point<gpui::Pixels>, delta: ScrollDelta) -> PlatformInput {
+    gpui::ScrollWheelEvent {
+        position,
+        delta,
+        modifiers: Modifiers::default(),
+        touch_phase: TouchPhase::Moved,
+        ..Default::default()
+    }
+    .to_platform_input()
 }

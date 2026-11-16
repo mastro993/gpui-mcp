@@ -173,12 +173,18 @@ jobs:
             version: 0.3.7
           - crate: gpui-pre
             version: 0.3.8
+          - crate: gpui-pre
+            version: 0.3.9
+          - crate: gpui-pre
+            version: 0.3.10
+          - crate: gpui-pre
+            version: 0.3.11
           # The optional patches must stay independent of the automation patch.
           - crate: gpui-pre
-            version: 0.3.9
+            version: 0.3.12
             without: font-fallback
           - crate: gpui-pre
-            version: 0.3.9
+            version: 0.3.12
             without: grid
           - crate: gpui-ce
             version: 0.2.2
