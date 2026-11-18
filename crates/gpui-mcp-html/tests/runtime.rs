@@ -1118,11 +1118,8 @@ fn rendered_elements_map_back_to_their_markup(cx: &mut TestAppContext) {
     visual.run_until_parked();
     let tree = automation.snapshot();
 
-    let markup = |node: &gpui_mcp_html::SourceNode| {
-        node.span
-            .clone()
-            .map_or_default(|span| &html[span])
-    };
+    let markup =
+        |node: &gpui_mcp_html::SourceNode| node.span.clone().map_or_default(|span| &html[span]);
     let by_tag = |tag: &str| map.nodes().iter().find(|node| node.tag == tag);
 
     // The paragraph has no authored id, yet maps to its markup through a generated one.
