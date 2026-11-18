@@ -11,7 +11,7 @@ pub(crate) fn validate(command: &InputCommand) -> Result<(), BridgeError> {
     match command {
         InputCommand::Key { keystroke } => {
             validate_text(keystroke)?;
-            Keystroke::parse(keystroke).map_err(|_| invalid("invalid GPUI keystroke syntax"))?;
+            parse_keystroke(keystroke)?;
         }
         InputCommand::KeySequence { keystrokes } => {
             if keystrokes.is_empty() || keystrokes.len() > MAX_KEY_SEQUENCE {
@@ -19,8 +19,7 @@ pub(crate) fn validate(command: &InputCommand) -> Result<(), BridgeError> {
             }
             for keystroke in keystrokes {
                 validate_text(keystroke)?;
-                Keystroke::parse(keystroke)
-                    .map_err(|_| invalid("invalid GPUI keystroke syntax"))?;
+                parse_keystroke(keystroke)?;
             }
         }
         InputCommand::TypeText { text } | InputCommand::ReplaceText { text } => {
@@ -126,15 +125,11 @@ pub(crate) fn dispatch_keyboard(
     validate(&command)?;
     match command {
         InputCommand::Key { keystroke } => {
-            let parsed = Keystroke::parse(&keystroke)
-                .map_err(|_| invalid("invalid GPUI keystroke syntax"))?;
-            window.dispatch_keystroke(parsed, cx);
+            window.dispatch_keystroke(parse_keystroke(&keystroke)?, cx);
         }
         InputCommand::KeySequence { keystrokes } => {
             for keystroke in keystrokes {
-                let parsed = Keystroke::parse(&keystroke)
-                    .map_err(|_| invalid("invalid GPUI keystroke syntax"))?;
-                window.dispatch_keystroke(parsed, cx);
+                window.dispatch_keystroke(parse_keystroke(&keystroke)?, cx);
             }
         }
         InputCommand::TypeText { text } => require_input_handler(
@@ -147,6 +142,33 @@ pub(crate) fn dispatch_keyboard(
         )?,
     }
     Ok(())
+}
+
+/// The modifier GPUI's `secondary-` alias stands for: Cmd on macOS, Ctrl elsewhere.
+const SECONDARY_MODIFIER: &str = if cfg!(target_os = "macos") {
+    "cmd"
+} else {
+    "ctrl"
+};
+
+/// Parse a client keystroke, resolving the `secondary-` alias first. From
+/// gpui-pre 0.3.10 `Keystroke::parse` rejects the alias and only
+/// `parse_with_os` resolves it, but the `gpui-pre` feature also covers
+/// releases without that API. The bridge runs natively, so the target OS is
+/// the host OS that `parse_with_os` would be given.
+fn parse_keystroke(source: &str) -> Result<Keystroke, BridgeError> {
+    let resolved = source
+        .split('-')
+        .map(|component| {
+            if component.eq_ignore_ascii_case("secondary") {
+                SECONDARY_MODIFIER
+            } else {
+                component
+            }
+        })
+        .collect::<Vec<_>>()
+        .join("-");
+    Keystroke::parse(&resolved).map_err(|_| invalid("invalid GPUI keystroke syntax"))
 }
 
 fn require_input_handler(available: bool, message: &'static str) -> Result<(), BridgeError> {
@@ -223,17 +245,19 @@ fn invalid(message: &'static str) -> BridgeError {
 
 #[cfg(all(test, feature = "test-support"))]
 mod tests {
-    use std::cell::Cell;
+    use std::cell::{Cell, RefCell};
     use std::rc::Rc;
 
     use gpui::{
-        AppContext as _, Context, InteractiveElement as _, IntoElement,
+        AppContext as _, Context, InteractiveElement as _, IntoElement, Modifiers,
         MouseButton as GpuiMouseButton, ParentElement as _, Render,
         StatefulInteractiveElement as _, Styled as _, TestAppContext, Window, div, point, px, size,
     };
-    use gpui_mcp_protocol::{InputCommand, MAX_KEY_SEQUENCE, MouseButton, Point, PointerCommand};
+    use gpui_mcp_protocol::{
+        BridgeError, ErrorCode, InputCommand, MAX_KEY_SEQUENCE, MouseButton, Point, PointerCommand,
+    };
 
-    use super::{dispatch_pointer, validate};
+    use super::{dispatch_keyboard, dispatch_pointer, validate};
 
     #[test]
     fn key_sequences_are_bounded_and_fully_validated() {
@@ -255,6 +279,67 @@ mod tests {
             })
             .is_err()
         );
+    }
+
+    #[test]
+    fn secondary_keystrokes_validate_and_malformed_keystrokes_do_not() {
+        for keystroke in [
+            "secondary-[",
+            "secondary-left",
+            "secondary-a",
+            "shift-SECONDARY-a",
+        ] {
+            assert_eq!(
+                validate(&InputCommand::Key {
+                    keystroke: keystroke.to_owned(),
+                }),
+                Ok(()),
+                "{keystroke}"
+            );
+        }
+        assert_eq!(
+            validate(&InputCommand::KeySequence {
+                keystrokes: vec!["secondary-a".to_owned(), "a-b".to_owned()],
+            }),
+            Err(BridgeError::new(
+                ErrorCode::InvalidRequest,
+                "invalid GPUI keystroke syntax"
+            ))
+        );
+    }
+
+    #[gpui::test]
+    fn secondary_keystrokes_reach_the_window_as_the_platform_modifier(cx: &mut TestAppContext) {
+        let received = Rc::new(RefCell::new(Vec::new()));
+        let received_for_interceptor = received.clone();
+        let _interceptor = cx.update(|cx| {
+            cx.intercept_keystrokes(move |event, _, _| {
+                received_for_interceptor
+                    .borrow_mut()
+                    .push((event.keystroke.key.clone(), event.keystroke.modifiers));
+            })
+        });
+        let visual = cx.add_empty_window();
+
+        visual.update(|window, cx| {
+            assert_eq!(
+                dispatch_keyboard(
+                    InputCommand::Key {
+                        keystroke: "secondary-a".to_owned(),
+                    },
+                    window,
+                    cx,
+                ),
+                Ok(())
+            );
+        });
+
+        let secondary = if cfg!(target_os = "macos") {
+            Modifiers::command()
+        } else {
+            Modifiers::control()
+        };
+        assert_eq!(*received.borrow(), vec![("a".to_owned(), secondary)]);
     }
 
     #[derive(Clone, Copy)]
