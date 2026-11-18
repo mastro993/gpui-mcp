@@ -533,6 +533,10 @@ mod tests {
     fn reading_the_bundle_queues_no_change() -> Result<(), Box<dyn std::error::Error>> {
         let (_root, paths) = fixture()?;
         let watcher = ProjectWatcher::new(paths.clone())?;
+        // macOS FSEvents can report the fixture's own writes after the watcher
+        // starts; drain them so only the read below is under test.
+        std::thread::sleep(Duration::from_millis(200));
+        while watcher.poll()?.is_some() {}
         ProjectSnapshot::load(&paths)?;
         std::thread::sleep(Duration::from_millis(200));
 
