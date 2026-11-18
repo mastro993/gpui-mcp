@@ -3,10 +3,10 @@
 This directory tracks Zed GPUI at commit
 `16c9aa7ea6d897a8044d9501cde1b295256722f2` (`gpui` 0.2.2).
 
-gpui-mcp carries nine focused changes that are not available from upstream
+gpui-mcp carries ten focused changes that are not available from upstream
 GPUI yet. The first six were last checked against `zed-industries/zed` `main`
-on 2026-09-22, at the commit named above; the last three were written against
-the same commit on 2026-09-23:
+on 2026-09-22, at the commit named above; the next three were written against
+the same commit on 2026-09-23, and the last on 2026-11-18:
 
 - read-only observation of each completed rendered AccessKit tree, with stable
   GPUI element paths, frame-unique node identities, bounds, text provenance,
@@ -75,7 +75,18 @@ the same commit on 2026-09-23:
   hover status, and switching between keyboard and pointer input still refresh
   the window: a drag is drawn at window level, any view may read
   `Window::is_window_hovered`, and input modality changes hover and
-  focus-visible styling everywhere.
+  focus-visible styling everywhere; and
+- accessibility for cached views. Upstream builds the AccessKit tree during
+  prepaint and registers action listeners during paint, so a cached view that
+  replays its previous frame drops out of the tree: a screen reader and the
+  bridge lose its nodes, its Click and Focus actions and its action listeners.
+  `A11y` now keeps the rendered frame's finished nodes, node bounds, focus ids,
+  focus and action listeners, and `Window::reuse_prepaint` and
+  `Window::reuse_paint` copy a reused range back, attaching the range's top
+  nodes to the current node, as they already do for hitboxes and mouse
+  listeners. A view renders again instead of replaying when the rendered frame
+  built no tree (`A11y::replays`), such as the first frame after assistive
+  technology or an observer connects.
 
 Two earlier additions are no longer needed and are not carried:
 

@@ -1039,6 +1039,31 @@ mod tests {
     }
 
     #[gpui::test]
+    fn a_replayed_cached_view_keeps_its_accessible_nodes(cx: &mut TestAppContext) {
+        let automation = Automation::isolated();
+        let (visual, [_, left, right], _, target) = open_cached_regions(cx, &automation);
+        move_pointer(visual, target);
+
+        press(visual, target, true);
+        press(visual, target, false);
+        let report = automation.frame_report(None, 16);
+        assert_eq!(outcome(&report, right), Some((ViewOutcome::Reused, None)));
+        assert!(matches!(
+            outcome(&report, left),
+            Some((ViewOutcome::Rendered, _))
+        ));
+        let tree = automation.snapshot();
+        for id in ["left-target", "right-target"] {
+            assert!(
+                tree.nodes[id].actions.contains(&NodeAction::Click),
+                "{id} keeps its click: {:?}",
+                tree.nodes[id].actions
+            );
+        }
+        assert_eq!(tree.nodes["right-target"].label.as_deref(), Some("Right"));
+    }
+
+    #[gpui::test]
     fn a_tooltip_redraws_only_the_view_that_shows_it(cx: &mut TestAppContext) {
         let executor = cx.executor();
         let automation = Automation::isolated();

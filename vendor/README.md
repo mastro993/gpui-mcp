@@ -27,6 +27,9 @@ way. This includes the parts GPUI Kit depends on:
 - Accessibility elements from other crates are observed.
 - Clicks and other interactions are still detected through wrapper elements.
 - Focusing a Kit input focuses the editor inside it.
+- A cached view that replays its previous frame keeps its accessibility
+  nodes, focus and action listeners, so Kit apps can cache views without
+  dropping out of the tree.
 
 The Kit demo's tests cover control states, focus, Unicode text replacement and
 redaction.
