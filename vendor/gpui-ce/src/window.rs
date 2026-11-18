@@ -937,6 +937,7 @@ pub(crate) struct Frame {
 #[derive(Clone, Default)]
 pub(crate) struct PrepaintStateIndex {
     hitboxes_index: usize,
+    a11y_nodes_index: usize,
     tooltips_index: usize,
     deferred_draws_index: usize,
     dispatch_tree_index: usize,
@@ -954,6 +955,7 @@ pub(crate) struct PaintIndex {
     accessed_element_states_index: usize,
     tab_handle_index: usize,
     line_layout_index: LineLayoutIndex,
+    a11y_listeners_index: usize,
 }
 
 impl Frame {
@@ -3261,6 +3263,8 @@ impl Window {
         let platform_a11y_active_at_start = self.a11y.platform_is_active();
         if self.a11y.is_active() {
             self.a11y.begin_frame();
+        } else {
+            self.a11y.skip_frame();
         }
 
         let _inspector_width: Pixels = rems(30.0).to_pixels(self.rem_size());
@@ -3606,6 +3610,7 @@ impl Window {
     pub(crate) fn prepaint_index(&self) -> PrepaintStateIndex {
         PrepaintStateIndex {
             hitboxes_index: self.next_frame.hitboxes.len(),
+            a11y_nodes_index: self.a11y.nodes.len(),
             tooltips_index: self.next_frame.tooltip_requests.len(),
             deferred_draws_index: self.next_frame.deferred_draws.len(),
             dispatch_tree_index: self.next_frame.dispatch_tree.len(),
@@ -3621,6 +3626,10 @@ impl Window {
             &range.start.observed,
             &range.end.observed,
         );
+        if self.a11y.replays() {
+            self.a11y
+                .reuse_nodes(range.start.a11y_nodes_index..range.end.a11y_nodes_index);
+        }
         self.next_frame.hitboxes.extend(
             self.rendered_frame.hitboxes[range.start.hitboxes_index..range.end.hitboxes_index]
                 .iter()
@@ -3681,10 +3690,16 @@ impl Window {
             accessed_element_states_index: self.next_frame.accessed_element_states.len(),
             tab_handle_index: self.next_frame.tab_stops.paint_index(),
             line_layout_index: self.text_system.layout_index(),
+            a11y_listeners_index: self.a11y.listeners_len(),
         }
     }
 
     pub(crate) fn reuse_paint(&mut self, range: Range<PaintIndex>) {
+        if self.a11y.replays() {
+            self.a11y.reuse_action_listeners(
+                range.start.a11y_listeners_index..range.end.a11y_listeners_index,
+            );
+        }
         self.next_frame.cursor_styles.extend(
             self.rendered_frame.cursor_styles
                 [range.start.cursor_styles_index..range.end.cursor_styles_index]
@@ -6496,10 +6511,7 @@ impl Window {
         listener: impl FnMut(Option<&accesskit::ActionData>, &mut Window, &mut App) + 'static,
     ) {
         self.a11y
-            .action_listeners
-            .entry(node_id)
-            .or_default()
-            .push((action, Box::new(listener)));
+            .add_action_listener(node_id, action, Box::new(listener));
     }
 
     #[cfg(not(target_family = "wasm"))]

@@ -61,7 +61,7 @@ pub(crate) fn transition_classes<'a>(
         .into_iter()
         .filter(|declaration| declaration.property.as_str() == "view-transition-class")
         .last()
-        .map(|declaration| {
+        .map_or_default(|declaration| {
             declaration
                 .value
                 .as_str()
@@ -70,7 +70,6 @@ pub(crate) fn transition_classes<'a>(
                 .map(|class| SharedString::from(class.to_owned()))
                 .collect()
         })
-        .unwrap_or_default()
 }
 
 /// The element at a child-index path.
@@ -348,7 +347,7 @@ mod kit {
         };
         // The image pair inherits the group's timing, as the pseudo-elements
         // do in browsers; author rules then replace the default fades.
-        let inherited = group.as_ref().map(inherited_timing).unwrap_or_default();
+        let inherited = group.as_ref().map_or_default(inherited_timing);
         for (part, ua_name, list) in [
             (ViewTransitionPart::Old, FADE_OUT, &mut style.old),
             (ViewTransitionPart::New, FADE_IN, &mut style.new),

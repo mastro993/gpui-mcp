@@ -239,8 +239,7 @@ impl Report {
                 let causes = view
                     .get("causes")
                     .and_then(JsonValue::as_object)
-                    .map(|causes| causes.keys().cloned().collect::<Vec<_>>())
-                    .unwrap_or_default();
+                    .map_or_default(|causes| causes.keys().cloned().collect::<Vec<_>>());
                 let reused = view.get("reused").and_then(JsonValue::as_u64) != Some(0);
                 causes
                     .into_iter()
@@ -289,10 +288,7 @@ impl Report {
     }
 
     fn summary(&self) -> String {
-        self.0
-            .get("summary")
-            .map(ToString::to_string)
-            .unwrap_or_default()
+        self.0.get("summary").map_or_default(ToString::to_string)
     }
 }
 

@@ -7,7 +7,7 @@ GPUI ships an equivalent.
 | Directory | What it is | Used by |
 | --- | --- | --- |
 | `gpui/` | GPUI 0.2.2 from Zed commit `16c9aa7ea6d897a8044d9501cde1b295256722f2` | The `zed` backend |
-| `gpui-pre/` | The crates.io `gpui-pre` 0.3.7 release (Zed commit `1a28cff4b409169bac058bca40dfbfeb7621d19b`), as used by GPUI Kit 0.7.0 | The `gpui-pre` backend |
+| `gpui-pre/` | The crates.io `gpui-pre` 0.3.12 release (Zed commit `d2a4fb6ded7c470be25d1541281da3882495b65b`), as used by GPUI Kit 0.10.0 | The `gpui-pre` backend |
 | `gpui-ce/` | The crates.io `gpui-ce` 0.2.2 release, the community fork of GPUI | The `gpui-ce` backend |
 | `patches/<crate>/<version>/` | The patches for each supported `gpui-pre` and `gpui-ce` version | `gpui-pre/`, `gpui-ce/` and downstream apps |
 
@@ -27,6 +27,9 @@ way. This includes the parts GPUI Kit depends on:
 - Accessibility elements from other crates are observed.
 - Clicks and other interactions are still detected through wrapper elements.
 - Focusing a Kit input focuses the editor inside it.
+- A cached view that replays its previous frame keeps its accessibility
+  nodes, focus and action listeners, so Kit apps can cache views without
+  dropping out of the tree.
 
 The Kit demo's tests cover control states, focus, Unicode text replacement and
 redaction.
@@ -38,7 +41,7 @@ source files use LF line endings, and the published `Cargo.lock` is removed.
 
 | Crate | Versions | Vendored here |
 | --- | --- | --- |
-| `gpui-pre` | 0.3.5, 0.3.6, 0.3.7 | 0.3.7 |
+| `gpui-pre` | 0.3.5 to 0.3.12 | 0.3.12 |
 | `gpui-ce` | 0.2.2 | 0.2.2 |
 
 Each version has its own folder in `patches/<crate>/<version>/` with three
@@ -67,6 +70,13 @@ change differs:
   into helper functions yet.
 - `gpui-ce` has no touch gestures, so it has no touch changes, and it shows
   tooltips from a different spot in `div.rs`.
+- From `gpui-pre` 0.3.10, `Keystroke::parse` takes only static strings; the
+  automation patch lets it take any string again, since the bridge parses
+  keystrokes it receives at run time. Fonts also resolve in
+  `resolve_font_uncached`, so the font patch applies the requested traits to
+  each fallback there.
+- From `gpui-pre` 0.3.11, a cached view also keys on its inherited opacity, so
+  an opacity change is a `LayoutChanged` render cause.
 
 `gpui-pre.json` and `gpui-ce.json` list each version with its download
 checksum, and say which version is vendored here. For `gpui-pre`, they also
@@ -102,14 +112,12 @@ workspace `Cargo.toml` doesn't match its `.json` file.
 - Both vendored copies match the published crate plus their patches.
 - The bridge builds, passes its tests and passes Clippy on every OS against
   both vendored copies.
-- On Linux it does the same against patched `gpui-pre` 0.3.5 and 0.3.6,
-  against `gpui-pre` 0.3.7 and `gpui-ce` 0.2.2 without the font patch, and
-  against `gpui-pre` 0.3.7 without the grid patch.
+- On Linux it does the same against patched `gpui-pre` 0.3.5 to 0.3.11,
+  against `gpui-pre` 0.3.12 and `gpui-ce` 0.2.2 without the font patch, and
+  against `gpui-pre` 0.3.12 without the grid patch.
 - `gpui-mcp-html` builds, passes its tests and passes Clippy against the
   vendored `gpui-pre` as well as the Zed tree.
 - The Kit demo builds and passes its tests.
-- The bridge builds and passes its tests on Rust 1.95, the oldest version it
-  supports.
 - Fresh apps that install the bridge from the pushed Git commit build, one for
   GPUI Kit and one for `gpui-ce`. In each, the app's GPUI crates and the bridge
   must share a single patched GPUI.

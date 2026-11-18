@@ -196,7 +196,8 @@ pub enum ViewRenderCause {
     /// A containing cached view rendered. GPUI renders every cached view
     /// inside a cached view that renders.
     AncestorRendered,
-    /// The view's bounds, content mask, or text style changed.
+    /// The view's bounds, content mask, text style, or inherited opacity
+    /// changed.
     LayoutChanged,
     /// The containing element's observation redaction boundary changed.
     ObservationChanged,

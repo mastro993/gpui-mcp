@@ -43,7 +43,7 @@ jobs:
 
       - name: Install pinned Rust toolchain
         shell: bash
-        run: rustup toolchain install 1.96.0 --profile minimal --component clippy,rustfmt && rustup default 1.96.0
+        run: rustup toolchain install 1.100.0 --profile minimal --component clippy,rustfmt && rustup default 1.100.0
 
       - uses: Swatinem/rust-cache@42dc69e1aa15d09112580998cf2ef0119e2e91ae # v2
 
@@ -144,7 +144,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Install pinned Rust toolchain
-        run: rustup toolchain install 1.96.0 --profile minimal && rustup default 1.96.0
+        run: rustup toolchain install 1.100.0 --profile minimal && rustup default 1.100.0
 
       - uses: Swatinem/rust-cache@42dc69e1aa15d09112580998cf2ef0119e2e91ae # v2
         with:
@@ -169,12 +169,22 @@ jobs:
             version: 0.3.5
           - crate: gpui-pre
             version: 0.3.6
+          - crate: gpui-pre
+            version: 0.3.7
+          - crate: gpui-pre
+            version: 0.3.8
+          - crate: gpui-pre
+            version: 0.3.9
+          - crate: gpui-pre
+            version: 0.3.10
+          - crate: gpui-pre
+            version: 0.3.11
           # The optional patches must stay independent of the automation patch.
           - crate: gpui-pre
-            version: 0.3.7
+            version: 0.3.12
             without: font-fallback
           - crate: gpui-pre
-            version: 0.3.7
+            version: 0.3.12
             without: grid
           - crate: gpui-ce
             version: 0.2.2
@@ -195,7 +205,7 @@ jobs:
             mesa-vulkan-drivers
 
       - name: Install pinned Rust toolchain
-        run: rustup toolchain install 1.96.0 --profile minimal --component clippy && rustup default 1.96.0
+        run: rustup toolchain install 1.100.0 --profile minimal --component clippy && rustup default 1.100.0
 
       - uses: Swatinem/rust-cache@42dc69e1aa15d09112580998cf2ef0119e2e91ae # v2
         with:
@@ -213,8 +223,9 @@ jobs:
 
       # The committed lockfile resolves the newest releases. For an older
       # gpui-pre, move GPUI Kit's base layer to the oldest release the
-      # workspace accepts (it accepts every gpui-pre the bridge does), then
-      # select the patched release.
+      # workspace accepts (it accepts every gpui-pre the bridge does), select
+      # the patched release, then move the base layer up to the newest release
+      # built for it: each later one pins its own gpui-pre.
       - name: Resolve the patched release
         if: matrix.crate == 'gpui-pre'
         env:
@@ -225,6 +236,7 @@ jobs:
           patch="patch.crates-io.$CRATE.path='$RUNNER_TEMP/$CRATE'"
           cargo update -p gpui-base --precise "$base" --config "$patch"
           cargo update -p "$CRATE" --precise "$VERSION" --config "$patch"
+          cargo update -p gpui-base --config "$patch"
 
       # The committed lockfile names the vendored release, so these steps
       # resolve the patched release instead of using --locked.
@@ -272,47 +284,6 @@ jobs:
           --features "gpui-mcp-html/gpui-pre,gpui-mcp-html/json,gpui-mcp-html/ron,gpui-mcp-html/dev-watch"
           --config "patch.crates-io.gpui-pre.path='$RUNNER_TEMP/gpui-pre'" -- -D warnings
 
-  msrv:
-    # gpui-mcp and gpui-mcp-protocol declare an older rust-version than the
-    # workspace toolchain, because apps link them.
-    name: Bridge on Rust 1.95
-    runs-on: ubuntu-24.04
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-
-      - name: Install Linux native dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install --no-install-recommends \
-            clang libclang-dev pkg-config cmake \
-            libfontconfig-dev libwayland-dev libxkbcommon-dev libxkbcommon-x11-dev \
-            libxrandr-dev libegl-dev libgbm-dev \
-            libx11-xcb-dev libxcb1-dev libxcb-render0-dev libxcb-shape0-dev \
-            libxcb-xfixes0-dev libxcb-randr0-dev libxcb-shm0-dev libxcb-xinput-dev \
-            libxcb-composite0-dev libpipewire-0.3-dev libdbus-1-dev libegl1-mesa-dev \
-            mesa-vulkan-drivers
-
-      # rust-toolchain.toml pins the workspace toolchain; `+1.95.0` overrides it.
-      - name: Install Rust 1.95
-        run: rustup toolchain install 1.95.0 --profile minimal
-
-      - uses: Swatinem/rust-cache@42dc69e1aa15d09112580998cf2ef0119e2e91ae # v2
-        with:
-          key: msrv
-
-      - name: Check the Zed backend
-        run: cargo +1.95.0 check -p gpui-mcp --locked
-
-      - name: Test the gpui-pre backend
-        run: >-
-          cargo +1.95.0 test -p gpui-mcp -p gpui-mcp-protocol --no-default-features
-          --features gpui-mcp/gpui-pre,gpui-mcp/test-support --locked
-
-      - name: Test the gpui-ce backend
-        run: >-
-          cargo +1.95.0 test -p gpui-mcp --no-default-features
-          --features gpui-ce,test-support,gpui_ce/test-support --locked
-
   external-consumer:
     name: Public Git installation
     runs-on: ubuntu-24.04
@@ -336,7 +307,7 @@ jobs:
             mesa-vulkan-drivers
 
       - name: Install pinned Rust toolchain
-        run: rustup toolchain install 1.96.0 --profile minimal && rustup default 1.96.0
+        run: rustup toolchain install 1.100.0 --profile minimal && rustup default 1.100.0
 
       - uses: Swatinem/rust-cache@42dc69e1aa15d09112580998cf2ef0119e2e91ae # v2
 

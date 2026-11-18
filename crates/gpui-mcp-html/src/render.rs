@@ -728,8 +728,7 @@ impl LiveHtml {
                     .scopes
                     .borrow()
                     .last()
-                    .map(ComputedScope::text_transform)
-                    .unwrap_or_default();
+                    .map_or_default(ComputedScope::text_transform);
                 match transform.apply(&text.value) {
                     std::borrow::Cow::Borrowed(_) => text.value.clone().into_any_element(),
                     std::borrow::Cow::Owned(transformed) => {
@@ -1211,8 +1210,7 @@ impl LiveHtml {
             vec![value.display().into_any_element()]
         } else if is_text_editable(element) {
             attribute(element, "value")
-                .map(|value| vec![value.to_owned().into_any_element()])
-                .unwrap_or_default()
+                .map_or_default(|value| vec![value.to_owned().into_any_element()])
         } else {
             let open = (element.source_tag == "details").then(|| {
                 old.disclosures
