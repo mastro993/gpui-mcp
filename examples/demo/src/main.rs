@@ -324,10 +324,12 @@ fn main() {
         .with_ansi(false)
         .init();
     gpui_platform::application().run(|cx: &mut App| {
+        let background = gpui_mcp::launched_in_background();
         let bounds = Bounds::centered(None, size(px(640.0), px(420.0)), cx);
         let opened = cx.open_window(
             WindowOptions {
                 window_bounds: Some(WindowBounds::Windowed(bounds)),
+                focus: !background,
                 ..WindowOptions::default()
             },
             |window, cx| {
@@ -411,6 +413,8 @@ fn main() {
             cx.quit();
             return;
         }
-        cx.activate(true);
+        if !background {
+            cx.activate(true);
+        }
     });
 }

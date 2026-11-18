@@ -24,6 +24,7 @@ extern crate gpui_ce as gpui;
 extern crate gpui_pre as gpui;
 
 mod annotations;
+mod frame_keeper;
 mod input;
 mod messages;
 mod native_window;
@@ -64,6 +65,23 @@ use registry::SharedState;
 #[must_use]
 pub fn native_window_id(window: &gpui::Window) -> Option<NativeWindowId> {
     native_window::id(window).and_then(NativeWindowId::new)
+}
+
+/// Environment variable that asks an app to open its window without taking focus.
+///
+/// Agents set `GPUI_MCP_BACKGROUND=1` when they launch an app, so its window
+/// does not take keyboard focus from the user. Read it with
+/// [`launched_in_background`].
+pub const BACKGROUND_ENV: &str = "GPUI_MCP_BACKGROUND";
+
+/// Whether the app was launched with [`BACKGROUND_ENV`] set to anything but
+/// empty or `0`.
+///
+/// When it was, open the window with `focus: false` and skip `cx.activate(true)`.
+/// The bridge keeps drawing a covered or minimized window while an agent drives it.
+#[must_use]
+pub fn launched_in_background() -> bool {
+    std::env::var_os(BACKGROUND_ENV).is_some_and(|value| !value.is_empty() && value != "0")
 }
 
 /// Cloneable application-side handle for semantic snapshots and diagnostic logs.

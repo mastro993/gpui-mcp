@@ -15,8 +15,10 @@ fn endpoint_dir() -> Option<std::path::PathBuf> {
 fn main() {
     gpui_kit::application().with_assets(Assets).run(|cx| {
         gpui_kit::init(cx);
+        let background = gpui_mcp::launched_in_background();
         let options = WindowOptions {
             window_bounds: Some(WindowBounds::centered(size(px(640.0), px(420.0)), cx)),
+            focus: !background,
             ..WindowOptions::default()
         };
         let opened = gpui_kit::open_window(options, cx, |window, cx| {
@@ -43,6 +45,8 @@ fn main() {
             cx.quit();
             return;
         }
-        cx.activate(true);
+        if !background {
+            cx.activate(true);
+        }
     });
 }

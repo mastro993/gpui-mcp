@@ -2396,6 +2396,39 @@ impl Window {
         self.invalidator.is_dirty()
     }
 
+    /// Whether this window wants a frame: it is invalidated, or a callback is
+    /// waiting for the next frame.
+    pub fn frame_requested(&self) -> bool {
+        self.invalidator.is_dirty() || !self.next_frame_callbacks.borrow().is_empty()
+    }
+
+    /// Run a requested frame now instead of waiting for the platform.
+    ///
+    /// Platforms stop requesting frames for a window nobody can see: one that is
+    /// covered by other windows, minimized, or on another desktop. Automation that
+    /// drives such a window in the background still needs its frames. Like a
+    /// platform frame request, this runs the next-frame callbacks and then draws.
+    /// It presents only on macOS. Other platforms pace presentation with their own
+    /// frame bookkeeping, so they present the drawn frame when they next request
+    /// one. Returns `false`, doing nothing, when no frame is requested or a draw is
+    /// already running on this thread.
+    pub fn draw_pending_frame(&mut self, cx: &mut App) -> bool {
+        if !self.frame_requested() || draw_in_progress() {
+            return false;
+        }
+        for callback in self.next_frame_callbacks.take() {
+            callback(self, cx);
+        }
+        if self.invalidator.is_dirty() {
+            let arena_clear_needed = self.draw(cx);
+            if cfg!(target_os = "macos") {
+                self.present();
+            }
+            arena_clear_needed.clear(cx);
+        }
+        true
+    }
+
     /// Observe completed rendered frames and paint a final tooling overlay.
     ///
     /// The window stores a weak reference. Retain `observer` for as long as it

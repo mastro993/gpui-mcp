@@ -775,6 +775,11 @@ impl SharedState {
         self.completed_frame.borrow().clone()
     }
 
+    /// Number of frames completed since the bridge was installed.
+    pub(crate) fn frame_count(&self) -> u64 {
+        self.completed_frame.borrow().frame_count
+    }
+
     pub(crate) fn add_log(&self, level: &str, message: &str) {
         let timestamp_ms = unix_ms();
         let mut sanitized = message.replace(['\r', '\n'], " ");

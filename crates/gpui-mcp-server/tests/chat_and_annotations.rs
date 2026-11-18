@@ -155,6 +155,7 @@ impl Fixture {
         let stderr = std::fs::File::create(&log)
             .map_err(|error| format!("could not create fixture log: {error}"))?;
         let child = Command::new(fixture_executable()?)
+            .env("GPUI_MCP_BACKGROUND", "1")
             .arg("--endpoint-dir")
             .arg(endpoints)
             .stdin(Stdio::null())

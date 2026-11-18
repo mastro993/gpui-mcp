@@ -307,7 +307,7 @@ fn main_rs(app_id: &str, title: &str) -> String {
         r#"use std::path::PathBuf;
 use std::time::Duration;
 
-use gpui::{{App, AppContext, Bounds, Context, IntoElement, Render, Window, px, size}};
+use gpui::{{App, AppContext, Bounds, Context, IntoElement, Render, Window, WindowOptions, px, size}};
 use gpui_mcp::{{AppId, BridgeConfig, BridgeHandle}};
 use gpui_mcp_html::{{
     HandlerId, HookOutcome, HookRegistry, LiveHtmlSession, ProjectPaths, ProjectSnapshot,
@@ -391,9 +391,13 @@ fn build_live(window: &mut Window, cx: &App) -> Result<AppView, String> {{
 fn main() {{
     gpui_platform::application().run(|cx: &mut App| {{
         gpui_mcp_html::init(cx);
+        let background = gpui_mcp::launched_in_background();
         let bounds = Bounds::centered(None, size(px(800.0), px(600.0)), cx);
         let opened = cx.open_window(
-            window::output_window_options(bounds),
+            WindowOptions {{
+                focus: !background,
+                ..window::output_window_options(bounds)
+            }},
             |window, cx| {{
                 window.set_window_title(TITLE);
                 let app = build_live(window, cx).unwrap_or_else(|error| {{
@@ -428,7 +432,9 @@ fn main() {{
             cx.quit();
             return;
         }}
-        cx.activate(true);
+        if !background {{
+            cx.activate(true);
+        }}
     }});
 }}
 "#

@@ -60,8 +60,11 @@ the same commit on 2026-09-23, and the last on 2026-10-02:
   checkpoints no longer copy every node drawn so far. Text is added to open
   nodes by position rather than by searching for their path;
 - `Window::request_frame`, which schedules a frame without the view-cache
-  invalidation of `Window::refresh`, and `Window::frame_pending`, which reports
-  whether the window is invalidated;
+  invalidation of `Window::refresh`, `Window::frame_pending`, which reports
+  whether the window is invalidated, and `Window::draw_pending_frame`, which
+  draws and presents a pending frame immediately. Platforms stop requesting
+  frames for a covered, minimized or off-desktop window; the bridge uses it to
+  keep such a window responsive while an agent drives it from the background;
 - view-scoped redraws for an element's own interaction state. Pressing,
   releasing, and the active state of an element with click or drag handlers,
   and showing its tooltip, notify the view that painted the element. Upstream

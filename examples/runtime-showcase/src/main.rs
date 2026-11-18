@@ -265,10 +265,12 @@ fn build_live(window: &mut Window, cx: &App) -> Result<AppView, String> {
 fn main() {
     gpui_platform::application().run(|cx: &mut App| {
         gpui_mcp_html::init(cx);
+        let background = gpui_mcp::launched_in_background();
         let bounds = Bounds::centered(None, size(px(1200.0), px(760.0)), cx);
         let opened = cx.open_window(
             WindowOptions {
                 window_bounds: Some(WindowBounds::Windowed(bounds)),
+                focus: !background,
                 ..WindowOptions::default()
             },
             |window, cx| {
@@ -305,6 +307,8 @@ fn main() {
             cx.quit();
             return;
         }
-        cx.activate(true);
+        if !background {
+            cx.activate(true);
+        }
     });
 }

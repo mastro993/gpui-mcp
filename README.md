@@ -54,6 +54,35 @@ let bridge = BridgeHandle::install(
 That is the whole integration. The client discovers running apps on its own.
 See the [demo](examples/demo/src/main.rs) for a complete window.
 
+### Keep working while the agent drives the app
+
+The app's window never needs to be in front or focused:
+
+- Input goes straight into GPUI. Your cursor and keyboard focus stay where
+  they are.
+- Platforms stop drawing a window that is covered, minimized or on another
+  desktop. While an agent is driving the app, the bridge draws those frames
+  itself, until 35 seconds after the agent's last request. Only macOS also
+  presents them; elsewhere the window shows them once the platform draws it
+  again.
+- Launched with `GPUI_MCP_BACKGROUND=1`, the app should open its window
+  without taking focus. The demo, the examples and generated projects do:
+
+```rust,ignore
+let background = gpui_mcp::launched_in_background();
+let opened = cx.open_window(
+    WindowOptions { focus: !background, ..WindowOptions::default() },
+    |window, cx| { /* install the bridge as above */ },
+);
+if !background {
+    cx.activate(true);
+}
+```
+
+Screenshots and recordings still read the window from the compositor. A
+covered window captures on macOS and Windows; a minimized or hidden one, or
+one on another desktop, does not.
+
 ## Making your UI agent-ready
 
 The tree is built from your rendered elements and their accessibility data.

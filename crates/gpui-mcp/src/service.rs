@@ -35,6 +35,7 @@ use tokio::time::timeout;
 use tokio_util::sync::CancellationToken;
 
 use crate::Automation;
+use crate::frame_keeper;
 use crate::input;
 use crate::registry::{AnnotationChange, SharedState};
 
@@ -402,6 +403,8 @@ impl BridgeHandle {
         write_descriptor(&endpoint_path, &descriptor)?;
 
         let (command_tx, command_rx) = async_channel::bounded(COMMAND_CAPACITY);
+        let (activity_tx, activity_rx) = async_channel::bounded(1);
+        frame_keeper::spawn(window, cx, &state, activity_rx);
         spawn_ui_pump(
             window,
             cx,
@@ -425,6 +428,7 @@ impl BridgeHandle {
                 runtime.block_on(run_listener(
                     listener,
                     command_tx,
+                    activity_tx,
                     listener_state,
                     listener_token,
                     pid,
@@ -916,6 +920,7 @@ fn handle_ui_operation(
 async fn run_listener(
     listener: LocalSocketListener,
     command_tx: Sender<UiCommand>,
+    activity_tx: Sender<()>,
     state: Arc<SharedState>,
     token: String,
     pid: ProcessId,
@@ -948,6 +953,7 @@ async fn run_listener(
                 };
                 let context = ConnectionContext {
                     command_tx: command_tx.clone(),
+                    activity_tx: activity_tx.clone(),
                     state: state.clone(),
                     token: token.clone(),
                     pid,
@@ -975,6 +981,8 @@ async fn run_listener(
 #[derive(Clone)]
 struct ConnectionContext {
     command_tx: Sender<UiCommand>,
+    /// Wakes the frame keeper; see [`frame_keeper::spawn`].
+    activity_tx: Sender<()>,
     state: Arc<SharedState>,
     token: String,
     pid: ProcessId,
@@ -1069,6 +1077,8 @@ async fn process_request(request: WireRequest, context: ConnectionContext) -> Wi
     if let Err(error) = validate_operation(&request.operation) {
         return WireResponse::failure(request.request_id, error);
     }
+    // A full channel already holds a wake-up, so this one can be dropped.
+    let _ = context.activity_tx.try_send(());
 
     let result = match request.operation {
         Operation::Ping => Ok(BridgeResult::Pong {

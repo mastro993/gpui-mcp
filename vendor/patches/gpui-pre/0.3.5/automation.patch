@@ -1740,7 +1740,7 @@ index c39e577..d3d22af 100644
              mouse_hit_test: HitTest::default(),
              modifiers,
              capslock,
-@@ -2252,6 +2355,118 @@ impl Window {
+@@ -2252,6 +2355,151 @@ impl Window {
          }
      }
  
@@ -1759,6 +1759,39 @@ index c39e577..d3d22af 100644
 +    /// will draw another frame without any further invalidation.
 +    pub fn frame_pending(&self) -> bool {
 +        self.invalidator.is_dirty()
++    }
++
++    /// Whether this window wants a frame: it is invalidated, or a callback is
++    /// waiting for the next frame.
++    pub fn frame_requested(&self) -> bool {
++        self.invalidator.is_dirty() || !self.next_frame_callbacks.borrow().is_empty()
++    }
++
++    /// Run a requested frame now instead of waiting for the platform.
++    ///
++    /// Platforms stop requesting frames for a window nobody can see: one that is
++    /// covered by other windows, minimized, or on another desktop. Automation that
++    /// drives such a window in the background still needs its frames. Like a
++    /// platform frame request, this runs the next-frame callbacks and then draws.
++    /// It presents only on macOS. Other platforms pace presentation with their own
++    /// frame bookkeeping, so they present the drawn frame when they next request
++    /// one. Returns `false`, doing nothing, when no frame is requested or a draw is
++    /// already running on this thread.
++    pub fn draw_pending_frame(&mut self, cx: &mut App) -> bool {
++        if !self.frame_requested() || draw_in_progress() {
++            return false;
++        }
++        for callback in self.next_frame_callbacks.take() {
++            callback(self, cx);
++        }
++        if self.invalidator.is_dirty() {
++            let arena_clear_needed = self.draw(cx);
++            if cfg!(target_os = "macos") {
++                self.present();
++            }
++            arena_clear_needed.clear(cx);
++        }
++        true
 +    }
 +
 +    /// Observe completed rendered frames and paint a final tooling overlay.
@@ -1859,7 +1892,7 @@ index c39e577..d3d22af 100644
      /// Close this window.
      pub fn remove_window(&mut self) {
          self.removed = true;
-@@ -2668,7 +2883,8 @@ impl Window {
+@@ -2668,7 +2916,8 @@ impl Window {
          self.scale_factor = self.platform_window.scale_factor();
          self.viewport_size = self.platform_window.content_size();
          self.display_id = self.platform_window.display().map(|display| display.id());
@@ -1869,7 +1902,7 @@ index c39e577..d3d22af 100644
  
          self.refresh();
  
-@@ -3080,7 +3296,7 @@ impl Window {
+@@ -3080,7 +3329,7 @@ impl Window {
  
      /// The position of the mouse relative to the window.
      pub fn mouse_position(&self) -> Point<Pixels> {
@@ -1878,7 +1911,7 @@ index c39e577..d3d22af 100644
      }
  
      /// Captures the pointer for the given hitbox. While captured, all mouse move and mouse up
-@@ -3141,6 +3357,7 @@ impl Window {
+@@ -3141,6 +3390,7 @@ impl Window {
      /// the contents of the new [`Scene`], use [`Self::present`].
      #[profiling::function]
      pub fn draw(&mut self, cx: &mut App) -> ArenaClearNeeded {
@@ -1886,7 +1919,7 @@ index c39e577..d3d22af 100644
          // Drain every draw in profiler builds so a previous frame's
          // first-invalidation timestamp can't be attributed to this one.
          #[cfg(feature = "profiler")]
-@@ -3283,6 +3500,7 @@ impl Window {
+@@ -3283,6 +3533,7 @@ impl Window {
          }
          self.needs_present.set(true);
  
@@ -1894,7 +1927,7 @@ index c39e577..d3d22af 100644
          #[cfg(feature = "profiler")]
          {
              let draw_duration = self
-@@ -3290,6 +3508,15 @@ impl Window {
+@@ -3290,6 +3541,15 @@ impl Window {
                  .end_draw(frame_dirty.dirty_at, frame_dirty.invalidations);
              self.debug_frame_overlay.record_frame(draw_duration);
          }
@@ -1910,7 +1943,7 @@ index c39e577..d3d22af 100644
  
          // Exit the scope to obtain the arena-clear token this draw owes; the
          // scope's teardown itself happens in `ElementArenaScope::drop`.
-@@ -3388,7 +3615,19 @@ impl Window {
+@@ -3388,7 +3648,19 @@ impl Window {
          self.invalidator.set_phase(DrawPhase::Prepaint);
          self.tooltip_bounds.take();
  
@@ -1931,7 +1964,7 @@ index c39e577..d3d22af 100644
          if self.a11y.is_active() {
              self.a11y.begin_frame();
          }
-@@ -3451,7 +3690,43 @@ impl Window {
+@@ -3451,7 +3723,43 @@ impl Window {
              tooltip_element = self.prepaint_tooltip(cx);
          }
  
@@ -1976,7 +2009,7 @@ index c39e577..d3d22af 100644
  
          // Now actually paint the elements.
          self.invalidator.set_phase(DrawPhase::Paint);
-@@ -3473,31 +3748,26 @@ impl Window {
+@@ -3473,31 +3781,26 @@ impl Window {
          #[cfg(any(feature = "inspector", debug_assertions))]
          self.paint_inspector_hitbox(cx);
  
@@ -2027,7 +2060,7 @@ index c39e577..d3d22af 100644
          }
      }
  
-@@ -3599,7 +3869,15 @@ impl Window {
+@@ -3599,7 +3902,15 @@ impl Window {
              traversal_order.sort_by_key(|ix| self.next_frame.deferred_draws[*ix].priority);
  
              for deferred_draw_ix in traversal_order {
@@ -2044,7 +2077,7 @@ index c39e577..d3d22af 100644
                      let deferred_draw = &mut self.next_frame.deferred_draws[deferred_draw_ix];
                      self.element_id_stack
                          .clone_from(&deferred_draw.element_id_stack);
-@@ -3608,6 +3886,7 @@ impl Window {
+@@ -3608,6 +3919,7 @@ impl Window {
                      (
                          deferred_draw.element.take(),
                          deferred_draw.parent_node,
@@ -2052,7 +2085,7 @@ index c39e577..d3d22af 100644
                          deferred_draw.current_view,
                          deferred_draw.rem_size,
                          deferred_draw.absolute_offset,
-@@ -3615,6 +3894,7 @@ impl Window {
+@@ -3615,6 +3927,7 @@ impl Window {
                      )
                  };
                  self.next_frame.dispatch_tree.set_active_node(parent_node);
@@ -2060,7 +2093,7 @@ index c39e577..d3d22af 100644
  
                  let prepaint_start = self.prepaint_index();
                  if let Some(mut element) = element {
-@@ -3630,6 +3910,7 @@ impl Window {
+@@ -3630,6 +3943,7 @@ impl Window {
                      self.reuse_prepaint(prepaint_range);
                  }
                  let prepaint_end = self.prepaint_index();
@@ -2068,7 +2101,7 @@ index c39e577..d3d22af 100644
                  self.next_frame.deferred_draws[deferred_draw_ix].prepaint_range =
                      prepaint_start..prepaint_end;
              }
-@@ -3694,10 +3975,16 @@ impl Window {
+@@ -3694,10 +4008,16 @@ impl Window {
              dispatch_tree_index: self.next_frame.dispatch_tree.len(),
              accessed_element_states_index: self.next_frame.accessed_element_states.len(),
              line_layout_index: self.text_system.layout_index(),
@@ -2085,7 +2118,7 @@ index c39e577..d3d22af 100644
          self.next_frame.hitboxes.extend(
              self.rendered_frame.hitboxes[range.start.hitboxes_index..range.end.hitboxes_index]
                  .iter()
-@@ -3735,6 +4022,7 @@ impl Window {
+@@ -3735,6 +4055,7 @@ impl Window {
                  .map(|deferred_draw| DeferredDraw {
                      current_view: deferred_draw.current_view,
                      parent_node: reused_subtree.refresh_node_id(deferred_draw.parent_node),
@@ -2093,7 +2126,7 @@ index c39e577..d3d22af 100644
                      element_id_stack: deferred_draw.element_id_stack.clone(),
                      text_style_stack: deferred_draw.text_style_stack.clone(),
                      content_mask: deferred_draw.content_mask,
-@@ -3944,6 +4232,7 @@ impl Window {
+@@ -3944,6 +4265,7 @@ impl Window {
              self.next_frame
                  .accessed_element_states
                  .truncate(index.accessed_element_states_index);
@@ -2101,7 +2134,7 @@ index c39e577..d3d22af 100644
              self.text_system.truncate_layouts(index.line_layout_index);
          }
          result
-@@ -4215,6 +4504,7 @@ impl Window {
+@@ -4215,6 +4537,7 @@ impl Window {
          self.next_frame.deferred_draws.push(DeferredDraw {
              current_view: self.current_view(),
              parent_node,
@@ -2109,7 +2142,7 @@ index c39e577..d3d22af 100644
              element_id_stack: self.element_id_stack.clone(),
              text_style_stack: self.text_style_stack.clone(),
              content_mask,
-@@ -5310,6 +5600,31 @@ impl Window {
+@@ -5310,6 +5633,31 @@ impl Window {
      /// Dispatch a mouse, keyboard, or touch event on the window.
      #[profiling::function]
      pub fn dispatch_event(&mut self, event: PlatformInput, cx: &mut App) -> DispatchEventResult {
@@ -2141,7 +2174,7 @@ index c39e577..d3d22af 100644
          #[cfg(feature = "profiler")]
          self.window_profiler.begin_input(event.kind_name());
          let update_count_before = self.invalidator.update_count();
-@@ -5336,17 +5651,16 @@ impl Window {
+@@ -5336,17 +5684,16 @@ impl Window {
              // Track the mouse position with our own state, since accessing the platform
              // API for the mouse position can only occur on the main thread.
              PlatformInput::MouseMove(mouse_move) => {
@@ -2161,7 +2194,7 @@ index c39e577..d3d22af 100644
                  self.modifiers = mouse_up.modifiers;
                  PlatformInput::MouseUp(mouse_up)
              }
-@@ -5354,6 +5668,9 @@ impl Window {
+@@ -5354,6 +5701,9 @@ impl Window {
                  PlatformInput::MousePressure(mouse_pressure)
              }
              PlatformInput::MouseExited(mouse_exited) => {
@@ -2171,7 +2204,7 @@ index c39e577..d3d22af 100644
                  self.modifiers = mouse_exited.modifiers;
                  PlatformInput::MouseExited(mouse_exited)
              }
-@@ -5363,12 +5680,12 @@ impl Window {
+@@ -5363,12 +5713,12 @@ impl Window {
                  PlatformInput::ModifiersChanged(modifiers_changed)
              }
              PlatformInput::ScrollWheel(scroll_wheel) => {
@@ -2186,7 +2219,7 @@ index c39e577..d3d22af 100644
                  self.modifiers = pinch.modifiers;
                  PlatformInput::Pinch(pinch)
              }
-@@ -5376,7 +5693,7 @@ impl Window {
+@@ -5376,7 +5726,7 @@ impl Window {
              // to internal drag and drop events.
              PlatformInput::FileDrop(file_drop) => match file_drop {
                  FileDropEvent::Entered { position, paths } => {
@@ -2195,7 +2228,7 @@ index c39e577..d3d22af 100644
                      let source_window = self.handle.window_id();
                      if !cx.restore_platform_drag(source_window) && cx.active_drag.is_none() {
                          cx.active_drag = Some(AnyDrag {
-@@ -5394,7 +5711,7 @@ impl Window {
+@@ -5394,7 +5744,7 @@ impl Window {
                      })
                  }
                  FileDropEvent::Pending { position } => {
@@ -2204,7 +2237,7 @@ index c39e577..d3d22af 100644
                      PlatformInput::MouseMove(MouseMoveEvent {
                          position,
                          pressed_button: Some(MouseButton::Left),
-@@ -5403,7 +5720,7 @@ impl Window {
+@@ -5403,7 +5753,7 @@ impl Window {
                  }
                  FileDropEvent::Submit { position } => {
                      cx.activate(true);
@@ -2213,7 +2246,7 @@ index c39e577..d3d22af 100644
                      PlatformInput::MouseUp(MouseUpEvent {
                          button: MouseButton::Left,
                          position,
-@@ -5426,18 +5743,21 @@ impl Window {
+@@ -5426,18 +5776,21 @@ impl Window {
              },
              PlatformInput::Touch(touch) => PlatformInput::Touch(touch),
              PlatformInput::LongPress(long_press) => {
@@ -2241,7 +2274,7 @@ index c39e577..d3d22af 100644
                  PlatformInput::TouchDrag(touch_drag)
              }
              PlatformInput::KeyDown(_) | PlatformInput::KeyUp(_) => event,
-@@ -5448,7 +5768,7 @@ impl Window {
+@@ -5448,7 +5801,7 @@ impl Window {
          } else if let Some(any_key_event) = event.keyboard_event() {
              self.dispatch_key_event(any_key_event, cx);
          } else if let Some(touch_event) = event.touch_event() {
@@ -2250,7 +2283,7 @@ index c39e577..d3d22af 100644
          }
          if let PlatformInput::LongPress(long_press) = &event {
              match long_press.phase {
-@@ -5526,7 +5846,7 @@ impl Window {
+@@ -5526,7 +5879,7 @@ impl Window {
      /// Runs the portable gesture recognizer over a raw touch event and
      /// dispatches whatever it resolves (scroll steps, synthesized taps)
      /// through the ordinary mouse-event path.
@@ -2259,7 +2292,7 @@ index c39e577..d3d22af 100644
          let mut event = event.clone();
          if !self.touch_prediction_enabled {
              event.predicted_position = None;
-@@ -5535,7 +5855,7 @@ impl Window {
+@@ -5535,7 +5888,7 @@ impl Window {
          if event.phase == crate::TouchPhase::Started
              && let Some(touch_drag) = self.touch_gestures.offer_touch_drag(event.id)
          {
@@ -2268,7 +2301,7 @@ index c39e577..d3d22af 100644
          }
          if event.phase == crate::TouchPhase::Started
              && self.touch_gestures.pending_long_press().is_some()
-@@ -5545,7 +5865,7 @@ impl Window {
+@@ -5545,7 +5898,7 @@ impl Window {
          let mut tapped = false;
          for gesture in recognized_gestures {
              tapped |= matches!(gesture, RecognizedTouchGesture::Tap { .. });
@@ -2277,7 +2310,7 @@ index c39e577..d3d22af 100644
          }
          if event.phase == crate::TouchPhase::Started {
              self.schedule_long_press_timer(cx);
-@@ -5565,22 +5885,27 @@ impl Window {
+@@ -5565,22 +5918,27 @@ impl Window {
          }
      }
  
@@ -2309,7 +2342,7 @@ index c39e577..d3d22af 100644
                  cx.propagate_event = true;
                  self.default_prevented = false;
                  let started = touch_drag.phase == crate::TouchPhase::Started;
-@@ -5591,11 +5916,14 @@ impl Window {
+@@ -5591,11 +5949,14 @@ impl Window {
                  }
              }
              RecognizedTouchGesture::LongPress(long_press) => {
@@ -2329,7 +2362,7 @@ index c39e577..d3d22af 100644
                  cx.propagate_event = true;
                  self.default_prevented = false;
                  let started = long_press.phase == crate::TouchPhase::Started;
-@@ -5628,7 +5956,7 @@ impl Window {
+@@ -5628,7 +5989,7 @@ impl Window {
              cx.update(move |window, cx| {
                  window.long_press_timer.take();
                  if let Some(gesture) = window.touch_gestures.offer_long_press(touch_id) {
@@ -2338,7 +2371,7 @@ index c39e577..d3d22af 100644
                  }
              })
              .log_err();
-@@ -5638,7 +5966,7 @@ impl Window {
+@@ -5638,7 +5999,7 @@ impl Window {
      fn schedule_touch_momentum_tick(&mut self) {
          self.on_next_frame(|window, cx| {
              if let Some(gesture) = window.touch_gestures.tick_momentum() {
