@@ -1064,6 +1064,27 @@ mod tests {
     }
 
     #[gpui::test]
+    fn leaving_after_a_press_without_a_move_clears_the_painted_hover(cx: &mut TestAppContext) {
+        let automation = Automation::isolated();
+        let (visual, [_, left, right], parking, target) = open_cached_regions(cx, &automation);
+        // A press at a new point with no move before it, as a synthetic click
+        // lands: the left region renders for its active state and paints its
+        // hover from the hit test.
+        press(visual, target, true);
+        press(visual, target, false);
+
+        automation.mark_frames();
+        move_pointer(visual, parking);
+        let report = automation.frame_report(None, 16);
+        assert!(
+            matches!(outcome(&report, left), Some((ViewOutcome::Rendered, _))),
+            "the left region repaints without its hover: {:?}",
+            report.views
+        );
+        assert_eq!(outcome(&report, right), Some((ViewOutcome::Reused, None)));
+    }
+
+    #[gpui::test]
     fn a_tooltip_redraws_only_the_view_that_shows_it(cx: &mut TestAppContext) {
         let executor = cx.executor();
         let automation = Automation::isolated();

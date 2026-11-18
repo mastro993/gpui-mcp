@@ -67,7 +67,10 @@ the same commit on 2026-09-23, and the last on 2026-11-18:
   and showing its tooltip, notify the view that painted the element. Upstream
   refreshes the whole window, which renders every cached view again. That state
   is read only while its view prepaints and paints the element, so the view is
-  enough. An element painted outside any view still refreshes. Hiding a tooltip
+  enough. An element painted outside any view still refreshes. An element also
+  records the hover it painted, which the hit test can change without a mouse
+  move (a press at a new point, a render under a resting pointer), so the
+  move that leaves notifies its view instead of leaving a cached view hovered. Hiding a tooltip
   requests a frame without notifying anything: a replayed element re-registers
   its old tooltip request, and that request's visibility check reports the
   tooltip hidden. This is the one change here that alters GPUI's behavior
