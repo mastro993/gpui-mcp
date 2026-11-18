@@ -79,7 +79,7 @@ index 99e8c33..99628b4 100644
  
                  if pushed_a11y_node {
 diff --git a/src/elements/div.rs b/src/elements/div.rs
-index b64bab1..ed36cb3 100644
+index b64bab1..c220622 100644
 --- a/src/elements/div.rs
 +++ b/src/elements/div.rs
 @@ -18,13 +18,13 @@
@@ -228,7 +228,32 @@ index b64bab1..ed36cb3 100644
          let is_focused = self
              .tracked_focus_handle
              .as_ref()
-@@ -2896,13 +2966,13 @@ impl Interactivity {
+@@ -2793,6 +2863,13 @@ impl Interactivity {
+                     .cloned()
+             });
+             let current_view = window.current_view();
++            // The hover style was just painted from this frame's hit test,
++            // which can change without a mouse move: a press at a new point,
++            // or a render under a resting pointer. Record what was painted, so
++            // the move that leaves notifies the view, which may be cached.
++            if let Some(hover_state) = &hover_state {
++                hover_state.borrow_mut().element = hitbox.is_hovered(window);
++            }
+ 
+             window.on_mouse_event(move |_: &MouseMoveEvent, phase, window, cx| {
+                 let hovered = hitbox.is_hovered(window);
+@@ -2815,6 +2892,10 @@ impl Interactivity {
+                     .and_then(|element| element.hover_state.as_ref())
+                     .cloned();
+                 let current_view = window.current_view();
++                // As for the element's own hover above.
++                if let Some(hover_state) = &hover_state {
++                    hover_state.borrow_mut().group = group_hitbox_id.is_hovered(window);
++                }
+ 
+                 window.on_mouse_event(move |_: &MouseMoveEvent, phase, window, cx| {
+                     let group_hovered = group_hitbox_id.is_hovered(window);
+@@ -2896,13 +2977,13 @@ impl Interactivity {
                      let pending_mouse_down = pending_mouse_down.clone();
                      let hitbox = hitbox.clone();
                      let has_aux_click_listeners = !aux_click_listeners.is_empty();
@@ -244,7 +269,7 @@ index b64bab1..ed36cb3 100644
                          }
                      }
                  });
-@@ -3030,7 +3100,7 @@ impl Interactivity {
+@@ -3030,7 +3111,7 @@ impl Interactivity {
                              let mut pending_mouse_down = pending_mouse_down.borrow_mut();
                              if pending_mouse_down.is_some() && hitbox.is_hovered(window) {
                                  captured_mouse_down = pending_mouse_down.take();
@@ -253,7 +278,7 @@ index b64bab1..ed36cb3 100644
                              } else if pending_mouse_down.is_some() {
                                  // Clear the pending mouse down event (without firing click handlers)
                                  // if the hitbox is not being hovered.
-@@ -3038,7 +3108,7 @@ impl Interactivity {
+@@ -3038,7 +3119,7 @@ impl Interactivity {
                                  // immediately after being clicked.
                                  // See https://github.com/zed-industries/zed/issues/24600 for more details
                                  pending_mouse_down.take();
@@ -262,7 +287,7 @@ index b64bab1..ed36cb3 100644
                              }
                          }
                          // Fire click handlers during the bubble phase.
-@@ -3160,10 +3230,10 @@ impl Interactivity {
+@@ -3160,10 +3241,10 @@ impl Interactivity {
  
              {
                  let active_state = active_state.clone();
@@ -275,7 +300,7 @@ index b64bab1..ed36cb3 100644
                      }
                  });
              }
-@@ -3174,7 +3244,7 @@ impl Interactivity {
+@@ -3174,7 +3255,7 @@ impl Interactivity {
                      .as_ref()
                      .and_then(|group_active| GroupHitboxes::get(&group_active.group, cx));
                  let hitbox = hitbox.clone();
@@ -284,7 +309,7 @@ index b64bab1..ed36cb3 100644
                      if phase == DispatchPhase::Bubble && !window.default_prevented() {
                          let group_hovered = active_group_hitbox
                              .is_some_and(|group_hitbox_id| group_hitbox_id.is_hovered(window));
-@@ -3184,7 +3254,7 @@ impl Interactivity {
+@@ -3184,7 +3265,7 @@ impl Interactivity {
                                  group: group_hovered,
                                  element: element_hovered,
                              };
@@ -293,7 +318,7 @@ index b64bab1..ed36cb3 100644
                          }
                      }
                  });
-@@ -3507,6 +3577,15 @@ impl Interactivity {
+@@ -3507,6 +3588,15 @@ impl Interactivity {
          if let Some(count) = self.aria.column_count {
              node.set_column_count(count);
          }
@@ -309,7 +334,7 @@ index b64bab1..ed36cb3 100644
          if !self.click_listeners.is_empty() {
              node.add_action(accesskit::Action::Click);
          }
-@@ -3517,6 +3596,43 @@ impl Interactivity {
+@@ -3517,6 +3607,43 @@ impl Interactivity {
              node.add_action(*action);
          }
      }
@@ -353,7 +378,7 @@ index b64bab1..ed36cb3 100644
  }
  
  /// The per-frame state of an interactive element. Used for tracking stateful interactions like clicks
-@@ -3583,6 +3699,22 @@ pub(crate) enum ActiveTooltip {
+@@ -3583,6 +3710,22 @@ pub(crate) enum ActiveTooltip {
      },
  }
  
@@ -376,7 +401,7 @@ index b64bab1..ed36cb3 100644
  pub(crate) fn clear_active_tooltip(
      active_tooltip: &Rc<RefCell<Option<ActiveTooltip>>>,
      window: &mut Window,
-@@ -3590,8 +3722,8 @@ pub(crate) fn clear_active_tooltip(
+@@ -3590,8 +3733,8 @@ pub(crate) fn clear_active_tooltip(
      match active_tooltip.borrow_mut().take() {
          None => {}
          Some(ActiveTooltip::WaitingForShow { .. }) => {}
@@ -387,7 +412,7 @@ index b64bab1..ed36cb3 100644
      }
  }
  
-@@ -3607,7 +3739,7 @@ pub(crate) fn clear_active_tooltip_if_not_hoverable(
+@@ -3607,7 +3750,7 @@ pub(crate) fn clear_active_tooltip_if_not_hoverable(
      };
      if should_clear {
          active_tooltip.borrow_mut().take();
@@ -396,7 +421,7 @@ index b64bab1..ed36cb3 100644
      }
  }
  
-@@ -3793,7 +3925,7 @@ fn handle_tooltip_mouse_move(
+@@ -3793,7 +3936,7 @@ fn handle_tooltip_mouse_move(
                                  }
                              });
                          *active_tooltip.borrow_mut() = new_tooltip;
@@ -405,7 +430,7 @@ index b64bab1..ed36cb3 100644
                      })
                      .ok();
                  }
-@@ -3866,7 +3998,7 @@ fn handle_tooltip_check_visible_and_update(
+@@ -3866,7 +4009,7 @@ fn handle_tooltip_check_visible_and_update(
                          return;
                      };
                      if active_tooltip.borrow_mut().take().is_some() {
@@ -414,7 +439,7 @@ index b64bab1..ed36cb3 100644
                      }
                  }
              });
-@@ -3969,6 +4101,14 @@ where
+@@ -3969,6 +4112,14 @@ where
          self.element.write_a11y_info(node);
      }
  

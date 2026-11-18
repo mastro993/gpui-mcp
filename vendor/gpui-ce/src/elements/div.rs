@@ -2863,6 +2863,13 @@ impl Interactivity {
                     .cloned()
             });
             let current_view = window.current_view();
+            // The hover style was just painted from this frame's hit test,
+            // which can change without a mouse move: a press at a new point,
+            // or a render under a resting pointer. Record what was painted, so
+            // the move that leaves notifies the view, which may be cached.
+            if let Some(hover_state) = &hover_state {
+                hover_state.borrow_mut().element = hitbox.is_hovered(window);
+            }
 
             window.on_mouse_event(move |_: &MouseMoveEvent, phase, window, cx| {
                 let hovered = hitbox.is_hovered(window);
@@ -2885,6 +2892,10 @@ impl Interactivity {
                     .and_then(|element| element.hover_state.as_ref())
                     .cloned();
                 let current_view = window.current_view();
+                // As for the element's own hover above.
+                if let Some(hover_state) = &hover_state {
+                    hover_state.borrow_mut().group = group_hitbox_id.is_hovered(window);
+                }
 
                 window.on_mouse_event(move |_: &MouseMoveEvent, phase, window, cx| {
                     let group_hovered = group_hitbox_id.is_hovered(window);
