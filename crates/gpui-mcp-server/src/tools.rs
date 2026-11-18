@@ -20,7 +20,7 @@ use rmcp::{
         ContentBlock, CreateTaskResult, ErrorData, GetTaskParams, GetTaskResult, Implementation,
         ListResourceTemplatesResult, ListResourcesResult, PaginatedRequestParams, ProtocolVersion,
         ReadResourceRequestParams, ReadResourceResponse, ReadResourceResult, Resource,
-        ResourceContents, ServerCapabilities, ServerInfo, SubscribeRequestParams,
+        ResourceContents, ServerCapabilities, ServerConfig, SubscribeRequestParams,
         SubscriptionFilter, UnsubscribeRequestParams, UpdateTaskParams,
     },
     service::{RequestContext, SubscriptionContext},
@@ -411,7 +411,6 @@ struct LogsArgs {
     min_level: Option<String>,
 }
 
-#[tool_router(router = core_router)]
 impl GpuiMcp {
     pub(crate) fn new(registry: BridgeRegistry, artifacts: ArtifactStore) -> Self {
         Self {
@@ -429,7 +428,7 @@ impl GpuiMcp {
     }
 
     fn production_router() -> ToolRouter<Self> {
-        let mut router = Self::core_router();
+        let mut router = ToolRouter::new();
         router.merge(annotations::router());
         router.merge(connection::router());
         router.merge(application_commands::router());
@@ -847,16 +846,18 @@ impl CacheHints for ReadResourceResult {
     }
 }
 
+// rmcp's handler methods are async, including those that answer at once.
+#[allow(clippy::unused_async_trait_impl)]
 #[tool_handler(router = self.tool_router)]
 impl ServerHandler for GpuiMcp {
-    fn get_info(&self) -> ServerInfo {
+    fn get_info(&self) -> ServerConfig {
         let capabilities = ServerCapabilities::builder()
             .enable_tools()
             .enable_resources()
             .enable_resources_subscribe()
             .enable_tasks()
             .build();
-        ServerInfo::new(capabilities)
+        ServerConfig::new(capabilities)
             .with_server_info(Implementation::from_build_env())
             .with_instructions(
                 "Discover, inspect, and automate explicitly instrumented GPUI windows. Call list_apps first when more than one app may be running, then select_app with the desired target_id; a single live app is selected automatically. Selection persists for this MCP transport. Prefer semantic element tools over coordinates. The app's window does not need to be in front or focused, so never activate or raise it: when you launch an app yourself, set GPUI_MCP_BACKGROUND=1 so it opens without taking the user's focus. Pointer actions use GPUI's native event pipeline; keyboard input uses GPUI directly. Screenshots and snapshots remain in memory, and all coordinates are logical pixels relative to the selected window. Video recording continuously captures raw native-window frames and encodes them directly into H.264/MP4 while recording; keep one MCP transport open for start_video_recording and stop_video_recording. Targets cannot be switched during recording. The optional pointer overlay reflects the same GPUI pointer state used for hover and clicks without reading or moving the global OS cursor. Artifact names are portable filenames inside the configured artifact directory; overwrite is opt-in. Annotate elements with annotate_elements (labels that follow the element; give them a ttl_ms or remove them when done). Apps with a chat box post messages for you: read them with read_messages or wait_for_messages, or subscribe to gpui://messages, and answer with send_message."

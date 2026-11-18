@@ -1281,6 +1281,52 @@ mod tests {
     }
 
     #[gpui::test]
+    fn a_replayed_cached_view_keeps_its_accessible_nodes(cx: &mut TestAppContext) {
+        let automation = Automation::isolated();
+        let (visual, [_, left, right], _, target) = open_cached_regions(cx, &automation);
+        move_pointer(visual, target);
+
+        press(visual, target, true);
+        press(visual, target, false);
+        let report = automation.frame_report(None, 16);
+        assert_eq!(outcome(&report, right), Some((ViewOutcome::Reused, None)));
+        assert!(matches!(
+            outcome(&report, left),
+            Some((ViewOutcome::Rendered, _))
+        ));
+        let tree = automation.snapshot();
+        for id in ["left-target", "right-target"] {
+            assert!(
+                tree.nodes[id].actions.contains(&NodeAction::Click),
+                "{id} keeps its click: {:?}",
+                tree.nodes[id].actions
+            );
+        }
+        assert_eq!(tree.nodes["right-target"].label.as_deref(), Some("Right"));
+    }
+
+    #[gpui::test]
+    fn leaving_after_a_press_without_a_move_clears_the_painted_hover(cx: &mut TestAppContext) {
+        let automation = Automation::isolated();
+        let (visual, [_, left, right], parking, target) = open_cached_regions(cx, &automation);
+        // A press at a new point with no move before it, as a synthetic click
+        // lands: the left region renders for its active state and paints its
+        // hover from the hit test.
+        press(visual, target, true);
+        press(visual, target, false);
+
+        automation.mark_frames();
+        move_pointer(visual, parking);
+        let report = automation.frame_report(None, 16);
+        assert!(
+            matches!(outcome(&report, left), Some((ViewOutcome::Rendered, _))),
+            "the left region repaints without its hover: {:?}",
+            report.views
+        );
+        assert_eq!(outcome(&report, right), Some((ViewOutcome::Reused, None)));
+    }
+
+    #[gpui::test]
     fn a_tooltip_redraws_only_the_view_that_shows_it(cx: &mut TestAppContext) {
         let executor = cx.executor();
         let automation = Automation::isolated();
@@ -1687,7 +1733,7 @@ mod annotation_tests {
 
         executor.advance_clock(Duration::from_millis(200));
         visual.run_until_parked();
-        assert!(automation.annotations().is_empty());
+        assert_eq!(automation.annotations(), []);
         assert!(automation.annotation_revision() > revision);
     }
 

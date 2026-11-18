@@ -3,10 +3,10 @@
 This directory tracks Zed GPUI at commit
 `16c9aa7ea6d897a8044d9501cde1b295256722f2` (`gpui` 0.2.2).
 
-gpui-mcp carries ten focused changes that are not available from upstream
+gpui-mcp carries eleven focused changes that are not available from upstream
 GPUI yet. The first six were last checked against `zed-industries/zed` `main`
 on 2026-09-22, at the commit named above; the next three were written against
-the same commit on 2026-09-23, and the last on 2026-10-02:
+the same commit on 2026-09-23, and the last two on 2026-10-02 and 2026-11-18:
 
 - read-only observation of each completed rendered AccessKit tree, with stable
   GPUI element paths, frame-unique node identities, bounds, text provenance,
@@ -70,7 +70,10 @@ the same commit on 2026-09-23, and the last on 2026-10-02:
   and showing its tooltip, notify the view that painted the element. Upstream
   refreshes the whole window, which renders every cached view again. That state
   is read only while its view prepaints and paints the element, so the view is
-  enough. An element painted outside any view still refreshes. Hiding a tooltip
+  enough. An element painted outside any view still refreshes. An element also
+  records the hover it painted, which the hit test can change without a mouse
+  move (a press at a new point, a render under a resting pointer), so the
+  move that leaves notifies its view instead of leaving a cached view hovered. Hiding a tooltip
   requests a frame without notifying anything: a replayed element re-registers
   its old tooltip request, and that request's visibility check reports the
   tooltip hidden. This is the one change here that alters GPUI's behavior
@@ -78,7 +81,7 @@ the same commit on 2026-09-23, and the last on 2026-10-02:
   hover status, and switching between keyboard and pointer input still refresh
   the window: a drag is drawn at window level, any view may read
   `Window::is_window_hovered`, and input modality changes hover and
-  focus-visible styling everywhere; and
+  focus-visible styling everywhere;
 - CSS grid track lists. Upstream exposes only `grid_cols(n)` / `grid_rows(n)`,
   which always mean `repeat(n, minmax(0, 1fr))`, although taffy implements
   full CSS grid. `GridTrack`, `GridTrackSize`, `GridTrackBreadth`,
@@ -91,7 +94,18 @@ the same commit on 2026-09-23, and the last on 2026-10-02:
   takes precedence over `grid_cols` / `grid_rows`, which are unchanged.
   Automation does not depend on it, so the `gpui-pre` and `gpui-ce` series
   keep it in a separate `grid.patch` that consumers may skip;
-  `gpui-mcp-html` uses it to render `grid-template-*`.
+  `gpui-mcp-html` uses it to render `grid-template-*`; and
+- accessibility for cached views. Upstream builds the AccessKit tree during
+  prepaint and registers action listeners during paint, so a cached view that
+  replays its previous frame drops out of the tree: a screen reader and the
+  bridge lose its nodes, its Click and Focus actions and its action listeners.
+  `A11y` now keeps the rendered frame's finished nodes, node bounds, focus ids,
+  focus and action listeners, and `Window::reuse_prepaint` and
+  `Window::reuse_paint` copy a reused range back, attaching the range's top
+  nodes to the current node, as they already do for hitboxes and mouse
+  listeners. A view renders again instead of replaying when the rendered frame
+  built no tree (`A11y::replays`), such as the first frame after assistive
+  technology or an observer connects.
 
 Two earlier additions are no longer needed and are not carried:
 

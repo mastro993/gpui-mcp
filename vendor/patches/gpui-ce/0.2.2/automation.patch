@@ -79,7 +79,7 @@ index 99e8c33..99628b4 100644
  
                  if pushed_a11y_node {
 diff --git a/src/elements/div.rs b/src/elements/div.rs
-index b64bab1..ed36cb3 100644
+index b64bab1..c220622 100644
 --- a/src/elements/div.rs
 +++ b/src/elements/div.rs
 @@ -18,13 +18,13 @@
@@ -228,7 +228,32 @@ index b64bab1..ed36cb3 100644
          let is_focused = self
              .tracked_focus_handle
              .as_ref()
-@@ -2896,13 +2966,13 @@ impl Interactivity {
+@@ -2793,6 +2863,13 @@ impl Interactivity {
+                     .cloned()
+             });
+             let current_view = window.current_view();
++            // The hover style was just painted from this frame's hit test,
++            // which can change without a mouse move: a press at a new point,
++            // or a render under a resting pointer. Record what was painted, so
++            // the move that leaves notifies the view, which may be cached.
++            if let Some(hover_state) = &hover_state {
++                hover_state.borrow_mut().element = hitbox.is_hovered(window);
++            }
+ 
+             window.on_mouse_event(move |_: &MouseMoveEvent, phase, window, cx| {
+                 let hovered = hitbox.is_hovered(window);
+@@ -2815,6 +2892,10 @@ impl Interactivity {
+                     .and_then(|element| element.hover_state.as_ref())
+                     .cloned();
+                 let current_view = window.current_view();
++                // As for the element's own hover above.
++                if let Some(hover_state) = &hover_state {
++                    hover_state.borrow_mut().group = group_hitbox_id.is_hovered(window);
++                }
+ 
+                 window.on_mouse_event(move |_: &MouseMoveEvent, phase, window, cx| {
+                     let group_hovered = group_hitbox_id.is_hovered(window);
+@@ -2896,13 +2977,13 @@ impl Interactivity {
                      let pending_mouse_down = pending_mouse_down.clone();
                      let hitbox = hitbox.clone();
                      let has_aux_click_listeners = !aux_click_listeners.is_empty();
@@ -244,7 +269,7 @@ index b64bab1..ed36cb3 100644
                          }
                      }
                  });
-@@ -3030,7 +3100,7 @@ impl Interactivity {
+@@ -3030,7 +3111,7 @@ impl Interactivity {
                              let mut pending_mouse_down = pending_mouse_down.borrow_mut();
                              if pending_mouse_down.is_some() && hitbox.is_hovered(window) {
                                  captured_mouse_down = pending_mouse_down.take();
@@ -253,7 +278,7 @@ index b64bab1..ed36cb3 100644
                              } else if pending_mouse_down.is_some() {
                                  // Clear the pending mouse down event (without firing click handlers)
                                  // if the hitbox is not being hovered.
-@@ -3038,7 +3108,7 @@ impl Interactivity {
+@@ -3038,7 +3119,7 @@ impl Interactivity {
                                  // immediately after being clicked.
                                  // See https://github.com/zed-industries/zed/issues/24600 for more details
                                  pending_mouse_down.take();
@@ -262,7 +287,7 @@ index b64bab1..ed36cb3 100644
                              }
                          }
                          // Fire click handlers during the bubble phase.
-@@ -3160,10 +3230,10 @@ impl Interactivity {
+@@ -3160,10 +3241,10 @@ impl Interactivity {
  
              {
                  let active_state = active_state.clone();
@@ -275,7 +300,7 @@ index b64bab1..ed36cb3 100644
                      }
                  });
              }
-@@ -3174,7 +3244,7 @@ impl Interactivity {
+@@ -3174,7 +3255,7 @@ impl Interactivity {
                      .as_ref()
                      .and_then(|group_active| GroupHitboxes::get(&group_active.group, cx));
                  let hitbox = hitbox.clone();
@@ -284,7 +309,7 @@ index b64bab1..ed36cb3 100644
                      if phase == DispatchPhase::Bubble && !window.default_prevented() {
                          let group_hovered = active_group_hitbox
                              .is_some_and(|group_hitbox_id| group_hitbox_id.is_hovered(window));
-@@ -3184,7 +3254,7 @@ impl Interactivity {
+@@ -3184,7 +3265,7 @@ impl Interactivity {
                                  group: group_hovered,
                                  element: element_hovered,
                              };
@@ -293,7 +318,7 @@ index b64bab1..ed36cb3 100644
                          }
                      }
                  });
-@@ -3507,6 +3577,15 @@ impl Interactivity {
+@@ -3507,6 +3588,15 @@ impl Interactivity {
          if let Some(count) = self.aria.column_count {
              node.set_column_count(count);
          }
@@ -309,7 +334,7 @@ index b64bab1..ed36cb3 100644
          if !self.click_listeners.is_empty() {
              node.add_action(accesskit::Action::Click);
          }
-@@ -3517,6 +3596,43 @@ impl Interactivity {
+@@ -3517,6 +3607,43 @@ impl Interactivity {
              node.add_action(*action);
          }
      }
@@ -353,7 +378,7 @@ index b64bab1..ed36cb3 100644
  }
  
  /// The per-frame state of an interactive element. Used for tracking stateful interactions like clicks
-@@ -3583,6 +3699,22 @@ pub(crate) enum ActiveTooltip {
+@@ -3583,6 +3710,22 @@ pub(crate) enum ActiveTooltip {
      },
  }
  
@@ -376,7 +401,7 @@ index b64bab1..ed36cb3 100644
  pub(crate) fn clear_active_tooltip(
      active_tooltip: &Rc<RefCell<Option<ActiveTooltip>>>,
      window: &mut Window,
-@@ -3590,8 +3722,8 @@ pub(crate) fn clear_active_tooltip(
+@@ -3590,8 +3733,8 @@ pub(crate) fn clear_active_tooltip(
      match active_tooltip.borrow_mut().take() {
          None => {}
          Some(ActiveTooltip::WaitingForShow { .. }) => {}
@@ -387,7 +412,7 @@ index b64bab1..ed36cb3 100644
      }
  }
  
-@@ -3607,7 +3739,7 @@ pub(crate) fn clear_active_tooltip_if_not_hoverable(
+@@ -3607,7 +3750,7 @@ pub(crate) fn clear_active_tooltip_if_not_hoverable(
      };
      if should_clear {
          active_tooltip.borrow_mut().take();
@@ -396,7 +421,7 @@ index b64bab1..ed36cb3 100644
      }
  }
  
-@@ -3793,7 +3925,7 @@ fn handle_tooltip_mouse_move(
+@@ -3793,7 +3936,7 @@ fn handle_tooltip_mouse_move(
                                  }
                              });
                          *active_tooltip.borrow_mut() = new_tooltip;
@@ -405,7 +430,7 @@ index b64bab1..ed36cb3 100644
                      })
                      .ok();
                  }
-@@ -3866,7 +3998,7 @@ fn handle_tooltip_check_visible_and_update(
+@@ -3866,7 +4009,7 @@ fn handle_tooltip_check_visible_and_update(
                          return;
                      };
                      if active_tooltip.borrow_mut().take().is_some() {
@@ -414,7 +439,7 @@ index b64bab1..ed36cb3 100644
                      }
                  }
              });
-@@ -3969,6 +4101,14 @@ where
+@@ -3969,6 +4112,14 @@ where
          self.element.write_a11y_info(node);
      }
  
@@ -1315,7 +1340,7 @@ index 65513b6..2c0f2d7 100644
          marked_range: Option<Range<usize>>,
          selection: &UTF16Selection,
 diff --git a/src/view.rs b/src/view.rs
-index f8343be..fcad003 100644
+index f8343be..af438d6 100644
 --- a/src/view.rs
 +++ b/src/view.rs
 @@ -1,14 +1,19 @@
@@ -1435,7 +1460,7 @@ index f8343be..fcad003 100644
                                  },
                              },
                          )
-@@ -505,3 +542,39 @@ impl Render for EmptyView {
+@@ -505,3 +542,44 @@ impl Render for EmptyView {
          Empty
      }
  }
@@ -1456,6 +1481,11 @@ index f8343be..fcad003 100644
 +    let Some(element_state) = element_state else {
 +        return Some(ViewRenderCause::FirstDraw);
 +    };
++    // The accessibility tree is rebuilt every frame; a replay can only copy
++    // the rendered frame's nodes back when that frame built them too.
++    if window.a11y.is_active() && !window.a11y.replays() {
++        return Some(ViewRenderCause::Refresh);
++    }
 +    if window.dirty_views.contains(&entity_id) {
 +        return Some(ViewRenderCause::Notified);
 +    }
@@ -1476,7 +1506,7 @@ index f8343be..fcad003 100644
 +    None
 +}
 diff --git a/src/window.rs b/src/window.rs
-index dfacb4f..910a8db 100644
+index dfacb4f..b0bf849 100644
 --- a/src/window.rs
 +++ b/src/window.rs
 @@ -5,8 +5,8 @@ use crate::{
@@ -1509,7 +1539,7 @@ index dfacb4f..910a8db 100644
      element_id_stack: SmallVec<[ElementId; 32]>,
      text_style_stack: Vec<TextStyleRefinement>,
      content_mask: Option<ContentMask<Pixels>>,
-@@ -926,6 +931,7 @@ pub(crate) struct Frame {
+@@ -926,16 +931,19 @@ pub(crate) struct Frame {
      #[cfg(any(feature = "inspector", debug_assertions))]
      pub(crate) inspector_hitboxes: FxHashMap<HitboxId, crate::InspectorElementId>,
      pub(crate) tab_stops: TabStopMap,
@@ -1517,7 +1547,11 @@ index dfacb4f..910a8db 100644
  }
  
  #[derive(Clone, Default)]
-@@ -936,6 +942,7 @@ pub(crate) struct PrepaintStateIndex {
+ pub(crate) struct PrepaintStateIndex {
+     hitboxes_index: usize,
++    a11y_nodes_index: usize,
+     tooltips_index: usize,
+     deferred_draws_index: usize,
      dispatch_tree_index: usize,
      accessed_element_states_index: usize,
      line_layout_index: LineLayoutIndex,
@@ -1525,7 +1559,15 @@ index dfacb4f..910a8db 100644
  }
  
  #[derive(Clone, Default)]
-@@ -975,6 +982,7 @@ impl Frame {
+@@ -947,6 +955,7 @@ pub(crate) struct PaintIndex {
+     accessed_element_states_index: usize,
+     tab_handle_index: usize,
+     line_layout_index: LineLayoutIndex,
++    a11y_listeners_index: usize,
+ }
+ 
+ impl Frame {
+@@ -975,6 +984,7 @@ impl Frame {
              #[cfg(any(feature = "inspector", debug_assertions))]
              inspector_hitboxes: FxHashMap::default(),
              tab_stops: TabStopMap::default(),
@@ -1533,7 +1575,7 @@ index dfacb4f..910a8db 100644
          }
      }
  
-@@ -991,6 +999,7 @@ impl Frame {
+@@ -991,6 +1001,7 @@ impl Frame {
          self.window_control_hitboxes.clear();
          self.deferred_draws.clear();
          self.tab_stops.clear();
@@ -1541,7 +1583,7 @@ index dfacb4f..910a8db 100644
          self.focus = None;
  
          #[cfg(any(test, feature = "test-support"))]
-@@ -1103,11 +1112,12 @@ pub struct Window {
+@@ -1103,11 +1114,12 @@ pub struct Window {
      pub(crate) next_tooltip_id: TooltipId,
      pub(crate) tooltip_bounds: Option<TooltipBounds>,
      next_frame_callbacks: Rc<RefCell<Vec<FrameCallback>>>,
@@ -1555,7 +1597,7 @@ index dfacb4f..910a8db 100644
      mouse_hit_test: HitTest,
      modifiers: Modifiers,
      capslock: Capslock,
-@@ -1145,6 +1155,95 @@ pub struct Window {
+@@ -1145,6 +1157,95 @@ pub struct Window {
      pub(crate) a11y: A11y,
  }
  
@@ -1651,7 +1693,7 @@ index dfacb4f..910a8db 100644
  #[derive(Clone, Debug, Default)]
  struct ModifierState {
      modifiers: Modifiers,
-@@ -1745,7 +1844,9 @@ impl Window {
+@@ -1745,7 +1846,9 @@ impl Window {
              let mut cx = cx.to_async();
              Box::new(move |event| {
                  handle
@@ -1662,7 +1704,7 @@ index dfacb4f..910a8db 100644
                      .log_err()
                      .unwrap_or(DispatchEventResult::default())
              })
-@@ -1848,6 +1949,7 @@ impl Window {
+@@ -1848,6 +1951,7 @@ impl Window {
              rendered_frame: Frame::new(DispatchTree::new(cx.keymap.clone(), cx.actions.clone())),
              next_frame: Frame::new(DispatchTree::new(cx.keymap.clone(), cx.actions.clone())),
              next_frame_callbacks,
@@ -1670,7 +1712,7 @@ index dfacb4f..910a8db 100644
              next_hitbox_id: HitboxId(0),
              next_tooltip_id: TooltipId::default(),
              tooltip_bounds: None,
-@@ -1855,7 +1957,7 @@ impl Window {
+@@ -1855,7 +1959,7 @@ impl Window {
              focus_listeners: SubscriberSet::new(),
              focus_lost_listeners: SubscriberSet::new(),
              default_prevented: true,
@@ -1679,7 +1721,7 @@ index dfacb4f..910a8db 100644
              mouse_hit_test: HitTest::default(),
              modifiers,
              capslock,
-@@ -2018,6 +2120,151 @@ impl Window {
+@@ -2018,6 +2122,151 @@ impl Window {
          }
      }
  
@@ -1831,7 +1873,7 @@ index dfacb4f..910a8db 100644
      /// Close this window.
      pub fn remove_window(&mut self) {
          self.removed = true;
-@@ -2414,7 +2661,8 @@ impl Window {
+@@ -2414,7 +2663,8 @@ impl Window {
          self.scale_factor = self.platform_window.scale_factor();
          self.viewport_size = self.platform_window.content_size();
          self.display_id = self.platform_window.display().map(|display| display.id());
@@ -1841,7 +1883,7 @@ index dfacb4f..910a8db 100644
  
          self.refresh();
  
-@@ -2760,7 +3008,7 @@ impl Window {
+@@ -2760,7 +3010,7 @@ impl Window {
  
      /// The position of the mouse relative to the window.
      pub fn mouse_position(&self) -> Point<Pixels> {
@@ -1850,7 +1892,7 @@ index dfacb4f..910a8db 100644
      }
  
      /// Captures the pointer for the given hitbox. While captured, all mouse move and mouse up
-@@ -2807,6 +3055,7 @@ impl Window {
+@@ -2807,6 +3057,7 @@ impl Window {
      /// the contents of the new [`Scene`], use [`Self::present`].
      #[profiling::function]
      pub fn draw(&mut self, cx: &mut App) -> ArenaClearNeeded {
@@ -1858,7 +1900,7 @@ index dfacb4f..910a8db 100644
          // Drain unconditionally so a stale first-invalidation timestamp can't
          // leak into a later frame across enable/disable of frame tracing.
          let frame_dirty = self.invalidator.take_frame_dirty();
-@@ -2918,6 +3167,17 @@ impl Window {
+@@ -2918,6 +3169,17 @@ impl Window {
          }
          self.needs_present.set(true);
  
@@ -1876,7 +1918,7 @@ index dfacb4f..910a8db 100644
          if let Some(draw_start) = draw_started_at {
              profiler::record_frame_timing(profiler::FrameTiming {
                  window_id: self.handle.window_id(),
-@@ -2986,7 +3246,19 @@ impl Window {
+@@ -2986,9 +3248,23 @@ impl Window {
          self.invalidator.set_phase(DrawPhase::Prepaint);
          self.tooltip_bounds.take();
  
@@ -1896,8 +1938,12 @@ index dfacb4f..910a8db 100644
 +        let platform_a11y_active_at_start = self.a11y.platform_is_active();
          if self.a11y.is_active() {
              self.a11y.begin_frame();
++        } else {
++            self.a11y.skip_frame();
          }
-@@ -3049,7 +3321,43 @@ impl Window {
+ 
+         let _inspector_width: Pixels = rems(30.0).to_pixels(self.rem_size());
+@@ -3049,7 +3325,43 @@ impl Window {
              tooltip_element = self.prepaint_tooltip(cx);
          }
  
@@ -1942,7 +1988,7 @@ index dfacb4f..910a8db 100644
  
          // Now actually paint the elements.
          self.invalidator.set_phase(DrawPhase::Paint);
-@@ -3071,31 +3379,26 @@ impl Window {
+@@ -3071,31 +3383,26 @@ impl Window {
          #[cfg(any(feature = "inspector", debug_assertions))]
          self.paint_inspector_hitbox(cx);
  
@@ -1993,7 +2039,7 @@ index dfacb4f..910a8db 100644
          }
      }
  
-@@ -3197,7 +3500,15 @@ impl Window {
+@@ -3197,7 +3504,15 @@ impl Window {
              traversal_order.sort_by_key(|ix| self.next_frame.deferred_draws[*ix].priority);
  
              for deferred_draw_ix in traversal_order {
@@ -2010,7 +2056,7 @@ index dfacb4f..910a8db 100644
                      let deferred_draw = &mut self.next_frame.deferred_draws[deferred_draw_ix];
                      self.element_id_stack
                          .clone_from(&deferred_draw.element_id_stack);
-@@ -3206,6 +3517,7 @@ impl Window {
+@@ -3206,6 +3521,7 @@ impl Window {
                      (
                          deferred_draw.element.take(),
                          deferred_draw.parent_node,
@@ -2018,7 +2064,7 @@ index dfacb4f..910a8db 100644
                          deferred_draw.current_view,
                          deferred_draw.rem_size,
                          deferred_draw.absolute_offset,
-@@ -3213,6 +3525,7 @@ impl Window {
+@@ -3213,6 +3529,7 @@ impl Window {
                      )
                  };
                  self.next_frame.dispatch_tree.set_active_node(parent_node);
@@ -2026,7 +2072,7 @@ index dfacb4f..910a8db 100644
  
                  let prepaint_start = self.prepaint_index();
                  if let Some(mut element) = element {
-@@ -3228,6 +3541,7 @@ impl Window {
+@@ -3228,6 +3545,7 @@ impl Window {
                      self.reuse_prepaint(prepaint_range);
                  }
                  let prepaint_end = self.prepaint_index();
@@ -2034,7 +2080,13 @@ index dfacb4f..910a8db 100644
                  self.next_frame.deferred_draws[deferred_draw_ix].prepaint_range =
                      prepaint_start..prepaint_end;
              }
-@@ -3297,10 +3611,16 @@ impl Window {
+@@ -3292,15 +3610,26 @@ impl Window {
+     pub(crate) fn prepaint_index(&self) -> PrepaintStateIndex {
+         PrepaintStateIndex {
+             hitboxes_index: self.next_frame.hitboxes.len(),
++            a11y_nodes_index: self.a11y.nodes.len(),
+             tooltips_index: self.next_frame.tooltip_requests.len(),
+             deferred_draws_index: self.next_frame.deferred_draws.len(),
              dispatch_tree_index: self.next_frame.dispatch_tree.len(),
              accessed_element_states_index: self.next_frame.accessed_element_states.len(),
              line_layout_index: self.text_system.layout_index(),
@@ -2048,10 +2100,14 @@ index dfacb4f..910a8db 100644
 +            &range.start.observed,
 +            &range.end.observed,
 +        );
++        if self.a11y.replays() {
++            self.a11y
++                .reuse_nodes(range.start.a11y_nodes_index..range.end.a11y_nodes_index);
++        }
          self.next_frame.hitboxes.extend(
              self.rendered_frame.hitboxes[range.start.hitboxes_index..range.end.hitboxes_index]
                  .iter()
-@@ -3338,6 +3658,7 @@ impl Window {
+@@ -3338,6 +3667,7 @@ impl Window {
                  .map(|deferred_draw| DeferredDraw {
                      current_view: deferred_draw.current_view,
                      parent_node: reused_subtree.refresh_node_id(deferred_draw.parent_node),
@@ -2059,7 +2115,24 @@ index dfacb4f..910a8db 100644
                      element_id_stack: deferred_draw.element_id_stack.clone(),
                      text_style_stack: deferred_draw.text_style_stack.clone(),
                      content_mask: deferred_draw.content_mask,
-@@ -3547,6 +3868,7 @@ impl Window {
+@@ -3360,10 +3690,16 @@ impl Window {
+             accessed_element_states_index: self.next_frame.accessed_element_states.len(),
+             tab_handle_index: self.next_frame.tab_stops.paint_index(),
+             line_layout_index: self.text_system.layout_index(),
++            a11y_listeners_index: self.a11y.listeners_len(),
+         }
+     }
+ 
+     pub(crate) fn reuse_paint(&mut self, range: Range<PaintIndex>) {
++        if self.a11y.replays() {
++            self.a11y.reuse_action_listeners(
++                range.start.a11y_listeners_index..range.end.a11y_listeners_index,
++            );
++        }
+         self.next_frame.cursor_styles.extend(
+             self.rendered_frame.cursor_styles
+                 [range.start.cursor_styles_index..range.end.cursor_styles_index]
+@@ -3547,6 +3883,7 @@ impl Window {
              self.next_frame
                  .accessed_element_states
                  .truncate(index.accessed_element_states_index);
@@ -2067,7 +2140,7 @@ index dfacb4f..910a8db 100644
              self.text_system.truncate_layouts(index.line_layout_index);
          }
          result
-@@ -3877,6 +4199,7 @@ impl Window {
+@@ -3877,6 +4214,7 @@ impl Window {
          self.next_frame.deferred_draws.push(DeferredDraw {
              current_view: self.current_view(),
              parent_node,
@@ -2075,7 +2148,7 @@ index dfacb4f..910a8db 100644
              element_id_stack: self.element_id_stack.clone(),
              text_style_stack: self.text_style_stack.clone(),
              content_mask,
-@@ -5054,6 +5377,31 @@ impl Window {
+@@ -5054,6 +5392,31 @@ impl Window {
      /// Dispatch a mouse or keyboard event on the window.
      #[profiling::function]
      pub fn dispatch_event(&mut self, event: PlatformInput, cx: &mut App) -> DispatchEventResult {
@@ -2107,7 +2180,7 @@ index dfacb4f..910a8db 100644
          #[cfg(feature = "input-latency-histogram")]
          let dispatch_time = Instant::now();
          let update_count_before = self.invalidator.update_count();
-@@ -5080,17 +5428,16 @@ impl Window {
+@@ -5080,17 +5443,16 @@ impl Window {
              // Track the mouse position with our own state, since accessing the platform
              // API for the mouse position can only occur on the main thread.
              PlatformInput::MouseMove(mouse_move) => {
@@ -2127,7 +2200,7 @@ index dfacb4f..910a8db 100644
                  self.modifiers = mouse_up.modifiers;
                  PlatformInput::MouseUp(mouse_up)
              }
-@@ -5098,6 +5445,9 @@ impl Window {
+@@ -5098,6 +5460,9 @@ impl Window {
                  PlatformInput::MousePressure(mouse_pressure)
              }
              PlatformInput::MouseExited(mouse_exited) => {
@@ -2137,7 +2210,7 @@ index dfacb4f..910a8db 100644
                  self.modifiers = mouse_exited.modifiers;
                  PlatformInput::MouseExited(mouse_exited)
              }
-@@ -5107,12 +5457,12 @@ impl Window {
+@@ -5107,12 +5472,12 @@ impl Window {
                  PlatformInput::ModifiersChanged(modifiers_changed)
              }
              PlatformInput::ScrollWheel(scroll_wheel) => {
@@ -2152,7 +2225,7 @@ index dfacb4f..910a8db 100644
                  self.modifiers = pinch.modifiers;
                  PlatformInput::Pinch(pinch)
              }
-@@ -5120,7 +5470,7 @@ impl Window {
+@@ -5120,7 +5485,7 @@ impl Window {
              // to internal drag and drop events.
              PlatformInput::FileDrop(file_drop) => match file_drop {
                  FileDropEvent::Entered { position, paths } => {
@@ -2161,7 +2234,7 @@ index dfacb4f..910a8db 100644
                      let source_window = self.handle.window_id();
                      if !cx.restore_platform_drag(source_window) && cx.active_drag.is_none() {
                          cx.active_drag = Some(AnyDrag {
-@@ -5138,7 +5488,7 @@ impl Window {
+@@ -5138,7 +5503,7 @@ impl Window {
                      })
                  }
                  FileDropEvent::Pending { position } => {
@@ -2170,7 +2243,7 @@ index dfacb4f..910a8db 100644
                      PlatformInput::MouseMove(MouseMoveEvent {
                          position,
                          pressed_button: Some(MouseButton::Left),
-@@ -5147,7 +5497,7 @@ impl Window {
+@@ -5147,7 +5512,7 @@ impl Window {
                  }
                  FileDropEvent::Submit { position } => {
                      cx.activate(true);
@@ -2179,11 +2252,75 @@ index dfacb4f..910a8db 100644
                      PlatformInput::MouseUp(MouseUpEvent {
                          button: MouseButton::Left,
                          position,
+@@ -6146,10 +6511,7 @@ impl Window {
+         listener: impl FnMut(Option<&accesskit::ActionData>, &mut Window, &mut App) + 'static,
+     ) {
+         self.a11y
+-            .action_listeners
+-            .entry(node_id)
+-            .or_default()
+-            .push((action, Box::new(listener)));
++            .add_action_listener(node_id, action, Box::new(listener));
+     }
+ 
+     #[cfg(not(target_family = "wasm"))]
 diff --git a/src/window/a11y.rs b/src/window/a11y.rs
-index 234e7f0..1800dfb 100644
+index 234e7f0..4f1bfee 100644
 --- a/src/window/a11y.rs
 +++ b/src/window/a11y.rs
-@@ -209,8 +209,13 @@ impl A11y {
+@@ -96,6 +96,17 @@
+ //!
+ //! These are cleared at the start of a frame, and re-populated during painting.
+ //!
++//! ### Cached views
++//!
++//! A cached view that was not notified replays its previous frame instead of
++//! prepainting and painting again, so its elements never push their nodes or
++//! register their action listeners. [`A11y`] therefore keeps the previous
++//! frame's nodes (in the order they were finished), node bounds, focus ids and
++//! action listeners, and [`Window::reuse_prepaint`] and [`Window::reuse_paint`]
++//! copy the reused range back into the frame being built. A frame can replay
++//! only when the rendered frame built a tree too ([`A11y::replays`]); otherwise
++//! cached views render again.
++//!
+ //! [`NodeId`]: accesskit::NodeId
+ 
+ use crate::*;
+@@ -149,6 +160,19 @@ pub(crate) struct A11y {
+     pub(crate) focus_ids: FxHashMap<NodeId, FocusId>,
+     pub(crate) node_bounds: FxHashMap<NodeId, Bounds<Pixels>>,
+     pub(crate) action_listeners: FxHashMap<NodeId, Vec<(Action, A11yActionListener)>>,
++    /// The node of every registered action listener, in paint order, so a
++    /// reused paint range can find its listeners.
++    listener_nodes: Vec<NodeId>,
++    /// The rendered frame's focus ids, node bounds and action listeners, which
++    /// a reused range copies back.
++    rendered_focus_ids: FxHashMap<NodeId, FocusId>,
++    rendered_node_bounds: FxHashMap<NodeId, Bounds<Pixels>>,
++    rendered_action_listeners: FxHashMap<NodeId, Vec<(Action, A11yActionListener)>>,
++    rendered_listener_nodes: Vec<NodeId>,
++    /// Whether the frame being drawn builds a tree.
++    building: bool,
++    /// Whether the rendered frame built one, so its nodes can be replayed.
++    rendered_built: bool,
+     /// The window's title, used to label the root node so assistive
+     /// technology can tell windows apart.
+     window_title: Option<SharedString>,
+@@ -177,6 +201,13 @@ impl A11y {
+             focus_ids: FxHashMap::default(),
+             node_bounds: FxHashMap::default(),
+             action_listeners: FxHashMap::default(),
++            listener_nodes: Vec::new(),
++            rendered_focus_ids: FxHashMap::default(),
++            rendered_node_bounds: FxHashMap::default(),
++            rendered_action_listeners: FxHashMap::default(),
++            rendered_listener_nodes: Vec::new(),
++            building: false,
++            rendered_built: false,
+             window_title,
+             last_focus_without_node: None,
+             debug: debug::A11yDebug::default(),
+@@ -209,8 +240,13 @@ impl A11y {
      ///
      /// See the docs for [`Self::active_flag`] and [`Self::active_this_frame`]
      /// for more commentary.
@@ -2199,3 +2336,187 @@ index 234e7f0..1800dfb 100644
      }
  
      pub(crate) fn is_active(&self) -> bool {
+@@ -267,14 +303,107 @@ impl A11y {
+         }
+     }
+ 
+-    /// Clear per-frame state and push the root node to start a new frame.
++    /// Keep the rendered frame's state for replay, clear the per-frame state
++    /// and push the root node to start a new frame.
+     pub(crate) fn begin_frame(&mut self) {
+-        self.focus_ids.clear();
+-        self.node_bounds.clear();
+-        self.action_listeners.clear();
++        self.rendered_built = std::mem::replace(&mut self.building, true);
++        self.rendered_focus_ids = std::mem::take(&mut self.focus_ids);
++        self.rendered_node_bounds = std::mem::take(&mut self.node_bounds);
++        self.rendered_action_listeners = std::mem::take(&mut self.action_listeners);
++        self.rendered_listener_nodes = std::mem::take(&mut self.listener_nodes);
+         self.nodes.begin_frame(self.window_title.as_ref());
+     }
+ 
++    /// A frame is drawn without a tree: the next one has nothing to replay.
++    pub(crate) fn skip_frame(&mut self) {
++        self.building = false;
++    }
++
++    /// Whether this frame builds a tree and can replay the rendered frame's
++    /// nodes. A cached view must render again when it can't.
++    pub(crate) fn replays(&self) -> bool {
++        self.active_this_frame && self.rendered_built
++    }
++
++    /// Register a listener for `action` on `node_id`.
++    pub(crate) fn add_action_listener(
++        &mut self,
++        node_id: NodeId,
++        action: Action,
++        listener: A11yActionListener,
++    ) {
++        self.listener_nodes.push(node_id);
++        self.action_listeners
++            .entry(node_id)
++            .or_default()
++            .push((action, listener));
++    }
++
++    /// The position of the next action listener, for a paint range.
++    pub(crate) fn listeners_len(&self) -> usize {
++        self.listener_nodes.len()
++    }
++
++    /// Replay the nodes a reused subtree finished in `range` of the rendered
++    /// frame: each joins the tree again with its bounds and focus id, the
++    /// subtree's top nodes become children of the current node, and the
++    /// rendered focus and active descendant carry over when they are inside.
++    pub(crate) fn reuse_nodes(&mut self, range: std::ops::Range<usize>) {
++        let Some(nodes) = self.nodes.rendered_nodes.get(range).map(<[_]>::to_vec) else {
++            return;
++        };
++        let children: FxHashSet<NodeId> = nodes
++            .iter()
++            .flat_map(|(_, node)| node.children().iter().copied())
++            .collect();
++        for (id, node) in nodes {
++            if !self.nodes.seen_ids.insert(id) {
++                log::warn!("a11y: replayed node {id:?} is already in the tree; dropping it");
++                continue;
++            }
++            if !children.contains(&id) {
++                if let Some(parent) = self.nodes.nodes_stack.last_mut() {
++                    parent.push_child(id);
++                }
++            }
++            if let Some(bounds) = self.rendered_node_bounds.get(&id) {
++                self.node_bounds.insert(id, *bounds);
++            }
++            if let Some(focus_id) = self.rendered_focus_ids.get(&id) {
++                self.focus_ids.insert(id, *focus_id);
++            }
++            if self.nodes.rendered_focus == Some(id) {
++                self.nodes.set_focus(id);
++            }
++            if self.nodes.rendered_active_descendant == Some(id) {
++                self.nodes.set_active_descendant(id);
++            }
++            #[cfg(debug_assertions)]
++            if let Some(info) = self.nodes.rendered_node_info.get(&id) {
++                self.nodes.node_info.insert(id, info.clone());
++            }
++            self.nodes.all_nodes.push((id, node));
++        }
++    }
++
++    /// Move the action listeners a reused paint `range` of the rendered frame
++    /// registered into this frame.
++    pub(crate) fn reuse_action_listeners(&mut self, range: std::ops::Range<usize>) {
++        let Some(ids) = self.rendered_listener_nodes.get(range).map(<[_]>::to_vec) else {
++            return;
++        };
++        for id in ids {
++            if let Some(listeners) = self.rendered_action_listeners.remove(&id) {
++                self.listener_nodes
++                    .extend(std::iter::repeat_n(id, listeners.len()));
++                self.action_listeners
++                    .entry(id)
++                    .or_default()
++                    .extend(listeners);
++            }
++        }
++    }
++
+     /// Finalize the tree and produce a [`TreeUpdate`] for the platform adapter.
+     pub(crate) fn end_frame(&mut self, frame: debug::FrameDebugInfo) -> TreeUpdate {
+         let update = self.nodes.finalize();
+@@ -371,6 +500,11 @@ pub(crate) struct A11yNodeBuilder {
+     /// `HashMap<NodeId, Node>` to remove the need for `seen_ids`
+     all_nodes: Vec<(NodeId, accesskit::Node)>,
+     seen_ids: FxHashSet<NodeId>,
++    /// The rendered frame's nodes in the order they were finished, without
++    /// the root, and its focus and active descendant, for replay.
++    rendered_nodes: Vec<(NodeId, accesskit::Node)>,
++    rendered_focus: Option<NodeId>,
++    rendered_active_descendant: Option<NodeId>,
+     /// The node that GPUI considers focused. Note that this may be different to
+     /// what is reported to accesskit - see [`Self::active_descendant`]
+     focus: Option<NodeId>,
+@@ -381,6 +515,8 @@ pub(crate) struct A11yNodeBuilder {
+     active_descendant: Option<NodeId>,
+     #[cfg(debug_assertions)]
+     node_info: FxHashMap<NodeId, debug::NodeDebugInfo>,
++    #[cfg(debug_assertions)]
++    rendered_node_info: FxHashMap<NodeId, debug::NodeDebugInfo>,
+ }
+ 
+ impl A11yNodeBuilder {
+@@ -390,10 +526,15 @@ impl A11yNodeBuilder {
+             nodes_stack: SmallVec::new(),
+             all_nodes: Vec::new(),
+             seen_ids: FxHashSet::default(),
++            rendered_nodes: Vec::new(),
++            rendered_focus: None,
++            rendered_active_descendant: None,
+             focus: None,
+             active_descendant: None,
+             #[cfg(debug_assertions)]
+             node_info: FxHashMap::default(),
++            #[cfg(debug_assertions)]
++            rendered_node_info: FxHashMap::default(),
+         }
+     }
+ 
+@@ -473,7 +614,9 @@ impl A11yNodeBuilder {
+         self.nodes_stack.clear();
+         self.seen_ids.clear();
+         #[cfg(debug_assertions)]
+-        self.node_info.clear();
++        {
++            self.rendered_node_info = std::mem::take(&mut self.node_info);
++        }
+         let mut root_node = accesskit::Node::new(accesskit::Role::Window);
+         if let Some(title) = window_title {
+             root_node.set_label(title.to_string());
+@@ -485,6 +628,11 @@ impl A11yNodeBuilder {
+         self.active_descendant = None;
+     }
+ 
++    /// How many nodes this frame has finished, for a prepaint range.
++    pub(crate) fn len(&self) -> usize {
++        self.all_nodes.len()
++    }
++
+     /// Returns whether a node with the given ID has been pushed in this frame.
+     pub(crate) fn has_node(&self, id: NodeId) -> bool {
+         id == ROOT_NODE_ID || self.seen_ids.contains(&id)
+@@ -550,6 +698,11 @@ impl A11yNodeBuilder {
+             );
+         }
+ 
++        // Everything below the root, in the order a reused range indexes it.
++        self.rendered_nodes = self.all_nodes.clone();
++        self.rendered_focus = self.focus;
++        self.rendered_active_descendant = self.active_descendant;
++
+         // Pop remaining nodes (should just be the root).
+         while !self.ids_stack.is_empty() {
+             if let (Some(id), Some(node)) = (self.ids_stack.pop(), self.nodes_stack.pop()) {

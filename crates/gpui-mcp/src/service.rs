@@ -12,8 +12,8 @@ use gpui::{App, Window};
 use gpui_mcp_protocol::{
     Annotation, AnnotationSource, AppId, ApplicationCommandDescriptor, ApplicationCommandResult,
     BridgeError, BridgeResult, Capabilities, Capability, ContextResource,
-    ContextResourceDescriptor, EndpointDescriptor, ErrorCode, Highlight, InstanceId, LiveDocument,
-    LiveDocumentPreview, LiveDocumentSource, LocalEndpoint, MAX_ANNOTATIONS,
+    ContextResourceDescriptor, EndpointDescriptor, ErrorCode, Highlight, InputCommand, InstanceId,
+    LiveDocument, LiveDocumentPreview, LiveDocumentSource, LocalEndpoint, MAX_ANNOTATIONS,
     MAX_APPLICATION_COMMAND_OUTPUT_BYTES, MAX_APPLICATION_COMMAND_SCHEMA_BYTES,
     MAX_APPLICATION_COMMANDS, MAX_CONTEXT_RESOURCE_BYTES, MAX_CONTEXT_RESOURCE_URI_BYTES,
     MAX_CONTEXT_RESOURCES, MAX_FRAME_SAMPLES, MAX_ID_BYTES, MAX_LABEL_BYTES,
@@ -669,25 +669,38 @@ fn spawn_ui_pump(
     window
         .spawn(cx, async move |cx| {
             while let Ok(command) = receiver.recv().await {
-                let result = cx
-                    .update(|window, cx| {
-                        handle_ui_operation(
-                            command.operation,
-                            &state,
-                            &document_host,
-                            &resource_host,
-                            &command_host,
-                            window,
-                            cx,
-                        )
-                    })
-                    .unwrap_or_else(|error| {
-                        tracing::warn!(%error, "GPUI window rejected an automation update");
-                        Err(BridgeError::new(
-                            ErrorCode::Internal,
-                            "application window is no longer available",
-                        ))
-                    });
+                let mut result = Ok(BridgeResult::Ack);
+                for operation in one_update_each(command.operation) {
+                    let operation = match operation {
+                        Ok(operation) => operation,
+                        Err(error) => {
+                            result = Err(error);
+                            break;
+                        }
+                    };
+                    result = cx
+                        .update(|window, cx| {
+                            handle_ui_operation(
+                                operation,
+                                &state,
+                                &document_host,
+                                &resource_host,
+                                &command_host,
+                                window,
+                                cx,
+                            )
+                        })
+                        .unwrap_or_else(|error| {
+                            tracing::warn!(%error, "GPUI window rejected an automation update");
+                            Err(BridgeError::new(
+                                ErrorCode::Internal,
+                                "application window is no longer available",
+                            ))
+                        });
+                    if result.is_err() {
+                        break;
+                    }
+                }
                 let _ = command.response.send(result);
             }
         })
@@ -772,6 +785,35 @@ fn spawn_message_listener(
             }
         })
         .detach();
+}
+
+/// The updates `operation` runs in. A key sequence becomes one update per
+/// keystroke, as the platform delivers keys: each update flushes its effects,
+/// so an observer that notifies a cached view runs before the next keystroke's
+/// dispatch draws the window, and that keystroke reaches the handlers the view
+/// rendered for the previous one. The whole sequence is validated first, so an
+/// invalid keystroke dispatches nothing.
+fn one_update_each(operation: Operation) -> Vec<Result<Operation, BridgeError>> {
+    let Operation::Input {
+        command: InputCommand::KeySequence { keystrokes },
+    } = operation
+    else {
+        return vec![Ok(operation)];
+    };
+    let sequence = InputCommand::KeySequence {
+        keystrokes: keystrokes.clone(),
+    };
+    if let Err(error) = input::validate(&sequence) {
+        return vec![Err(error)];
+    }
+    keystrokes
+        .into_iter()
+        .map(|keystroke| {
+            Ok(Operation::Input {
+                command: InputCommand::Key { keystroke },
+            })
+        })
+        .collect()
 }
 
 #[allow(clippy::too_many_lines)]
@@ -1771,8 +1813,44 @@ mod tests {
     use gpui_mcp_protocol::{AppId, ContextResource, ContextResourceDescriptor};
 
     use super::{
-        BridgeConfig, encode_hex, validate_context_resource, validate_context_resource_list,
+        BridgeConfig, encode_hex, one_update_each, validate_context_resource,
+        validate_context_resource_list,
     };
+    use gpui_mcp_protocol::{InputCommand, Operation};
+
+    #[test]
+    fn a_key_sequence_dispatches_one_keystroke_per_update() {
+        let sequence = |keys: &[&str]| Operation::Input {
+            command: InputCommand::KeySequence {
+                keystrokes: keys.iter().map(|key| (*key).to_owned()).collect(),
+            },
+        };
+        let updates = one_update_each(sequence(&["home", "right", "right"]));
+        let keys: Vec<Option<String>> = updates
+            .into_iter()
+            .map(|update| match update {
+                Ok(Operation::Input {
+                    command: InputCommand::Key { keystroke },
+                }) => Some(keystroke),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(
+            keys,
+            ["home", "right", "right"].map(|key| Some(key.to_owned()))
+        );
+
+        let invalid = one_update_each(sequence(&["right", "a-b"]));
+        assert!(
+            matches!(invalid.as_slice(), [Err(_)]),
+            "an invalid keystroke dispatches nothing: {invalid:?}"
+        );
+
+        assert!(matches!(
+            one_update_each(Operation::MarkFrames).as_slice(),
+            [Ok(Operation::MarkFrames)]
+        ));
+    }
 
     #[test]
     fn application_identifier_blocks_path_traversal() {
