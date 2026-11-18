@@ -545,6 +545,11 @@ fn view_cache_miss(
     let Some(element_state) = element_state else {
         return Some(ViewRenderCause::FirstDraw);
     };
+    // The accessibility tree is rebuilt every frame; a replay can only copy
+    // the rendered frame's nodes back when that frame built them too.
+    if window.a11y.is_active() && !window.a11y.replays() {
+        return Some(ViewRenderCause::Refresh);
+    }
     if window.dirty_views.contains(&entity_id) {
         return Some(ViewRenderCause::Notified);
     }
