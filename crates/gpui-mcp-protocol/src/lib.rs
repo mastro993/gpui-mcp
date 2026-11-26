@@ -435,7 +435,8 @@ pub struct ValueInfo {
 /// Dynamic state of a semantic node.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, JsonSchema)]
 pub struct NodeState {
-    /// Whether the application considers the node visible.
+    /// Whether any of the node shows: it is not hidden, has a size, and is not
+    /// scrolled entirely out of its scroll containers.
     pub visible: bool,
     /// Whether the node accepts input.
     pub enabled: bool,
@@ -484,6 +485,11 @@ pub struct UiNode {
     pub description: Option<String>,
     /// Bounds in logical pixels for the current frame.
     pub bounds: Option<Rect>,
+    /// The part of `bounds` its scroll containers do not clip, or `None` when
+    /// the node is not visible. Pointer actions aim at its center. Bridges
+    /// older than this field omit it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub visible_bounds: Option<Rect>,
     /// Current state.
     pub state: NodeState,
     /// Actions accepted by the node.

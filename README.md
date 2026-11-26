@@ -140,6 +140,11 @@ transitions (see [Motion](docs/visual-builder.md#motion)).
 Prefer the element tools over coordinates. All coordinates are logical pixels
 relative to the window.
 
+An element is visible only while some of it shows inside its scroll
+containers; that part is its `visible_bounds`, and the element tools aim at its
+center. An element scrolled out of view is refused, so `scroll` it into view
+first. `bounds` stays the element's full layout box.
+
 Clients that support the MCP tasks extension (SEP-2663) get the tools that can
 block for seconds (`wait_for_messages`, `wait_for_element`, `wait_for_state`,
 `record_performance`) as tasks they poll with `tasks/get`, so a long wait does
