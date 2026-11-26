@@ -3,7 +3,7 @@ use super::{
     InputCommand, Json, KeyArgs, MouseButton, NodeAction, Operation, Parameters, Point,
     PointerButtonArgs, PointerCommand, PointerMoveArgs, Role, ScrollArgs, ScrollPointArgs,
     SetTextArgs, SetValueArgs, ToolRouter, TypeTextArgs, Value, ack_json, encode_error, get_node,
-    json, object_output, require_bounds, tool, tool_router, validate_pointer_point, validate_value,
+    json, object_output, pointer_point, tool, tool_router, validate_pointer_point, validate_value,
 };
 
 #[tool_router(router = input_router)]
@@ -204,7 +204,7 @@ impl GpuiMcp {
     ) -> Result<Json<Value>, String> {
         let from = self.element_point(&args.from_id, NodeAction::Drag).await?;
         let tree = self.tree().await?;
-        let to = require_bounds(get_node(&tree, &args.to_id)?)?.center();
+        let to = pointer_point(get_node(&tree, &args.to_id)?)?;
         self.drag_between(from, to, args.steps).await?;
         Ok(ack_json("dragged"))
     }
@@ -343,7 +343,7 @@ impl GpuiMcp {
                     "checkable element did not expose its checked state".to_owned()
                 })?;
                 if requested != current {
-                    let point = require_bounds(&node)?.center();
+                    let point = pointer_point(&node)?;
                     self.click_at(point, MouseButton::Left, 1).await?;
                 }
             }

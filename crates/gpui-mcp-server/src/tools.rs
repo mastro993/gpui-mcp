@@ -625,14 +625,17 @@ impl GpuiMcp {
 
     async fn element_point(&self, id: &str, action: NodeAction) -> Result<Point, String> {
         let node = self.element_with_action(id, action).await?;
-        Ok(require_bounds(&node)?.center())
+        pointer_point(&node)
     }
 
     async fn element_with_action(&self, id: &str, action: NodeAction) -> Result<UiNode, String> {
         let tree = self.tree().await?;
         let node = get_node(&tree, id)?;
-        if !node.state.visible || !node.state.enabled {
-            return Err(format!("element {id:?} is not visible and enabled"));
+        if !node.state.visible {
+            return Err(not_visible(id));
+        }
+        if !node.state.enabled {
+            return Err(format!("element {id:?} is not enabled"));
         }
         if !node.actions.contains(&action) {
             return Err(format!("element {id:?} does not support {action:?}"));
@@ -1250,6 +1253,23 @@ fn require_bounds(node: &UiNode) -> Result<Rect, String> {
         .ok_or_else(|| format!("element {:?} has no valid current bounds", node.id))
 }
 
+fn not_visible(id: &str) -> String {
+    format!("element {id:?} is not visible: it is hidden or scrolled out of view")
+}
+
+/// Where a pointer action aims at `node`: the center of the part its scroll
+/// containers leave visible, or of its bounds when the bridge reports no such
+/// part. A node scrolled out of view is refused rather than clicked through.
+fn pointer_point(node: &UiNode) -> Result<Point, String> {
+    if !node.state.visible {
+        return Err(not_visible(&node.id));
+    }
+    match node.visible_bounds.filter(|bounds| bounds.is_valid()) {
+        Some(shown) => Ok(shown.center()),
+        None => Ok(require_bounds(node)?.center()),
+    }
+}
+
 fn validate_value(input: &str, value: &ValueInfo) -> Result<(), String> {
     if value.min.is_none() && value.max.is_none() && value.step.is_none() {
         return Ok(());
@@ -1507,13 +1527,16 @@ mod tests {
     use std::sync::{Arc, Mutex};
     use std::time::Duration;
 
-    use gpui_mcp_protocol::{BridgeResult, FrameStats, NodeState, Operation, PendingFrame, UiNode};
+    use gpui_mcp_protocol::{
+        BridgeResult, FrameStats, NodeAction, NodeState, Operation, PendingFrame, Point, Rect,
+        UiNode,
+    };
     use serde_json::json;
 
     use super::{
         FindArgs, MAX_SETTLE_FRAMES, Role, StartVideoRecordingArgs, UiTree, WaitStateArgs,
-        default_result_limit_for_test, find_nodes, settle_pending_frames, settle_requested_frames,
-        state_matches, tree_diff,
+        default_result_limit_for_test, find_nodes, pointer_point, settle_pending_frames,
+        settle_requested_frames, state_matches, tree_diff,
     };
 
     fn stats(frame_count: u64) -> BridgeResult {
@@ -1676,6 +1699,48 @@ mod tests {
     }
 
     #[test]
+    fn pointer_actions_aim_at_the_visible_part_and_refuse_a_clipped_node() {
+        let bounds = Rect {
+            x: 0.,
+            y: 240.,
+            width: 40.,
+            height: 20.,
+        };
+        let mut node = UiNode {
+            id: "row-action".to_owned(),
+            parent: None,
+            children: Vec::new(),
+            role: Role::Button,
+            label: None,
+            description: None,
+            bounds: Some(bounds),
+            visible_bounds: Some(Rect {
+                height: 10.,
+                ..bounds
+            }),
+            state: NodeState::default(),
+            actions: vec![NodeAction::Click],
+            text: None,
+            value: None,
+            metadata: BTreeMap::new(),
+        };
+        assert_eq!(pointer_point(&node), Ok(Point { x: 20., y: 245. }));
+
+        // A bridge older than `visible_bounds` reports only the bounds.
+        node.visible_bounds = None;
+        assert_eq!(pointer_point(&node), Ok(Point { x: 20., y: 250. }));
+
+        node.state.visible = false;
+        assert_eq!(
+            pointer_point(&node),
+            Err(
+                "element \"row-action\" is not visible: it is hidden or scrolled out of view"
+                    .to_owned()
+            )
+        );
+    }
+
+    #[test]
     fn find_is_case_insensitive_by_default() {
         let node = UiNode {
             id: "save".to_owned(),
@@ -1685,6 +1750,7 @@ mod tests {
             label: Some("Save Document".to_owned()),
             description: None,
             bounds: None,
+            visible_bounds: None,
             state: NodeState::default(),
             actions: Vec::new(),
             text: None,
@@ -1770,6 +1836,7 @@ mod tests {
                     label: None,
                     description: None,
                     bounds: None,
+                    visible_bounds: None,
                     state: NodeState::default(),
                     actions: Vec::new(),
                     text: None,

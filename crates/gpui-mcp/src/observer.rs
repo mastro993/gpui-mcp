@@ -1,5 +1,5 @@
 use std::{
-    collections::{BTreeMap, HashMap, HashSet},
+    collections::{BTreeMap, HashMap},
     sync::{Arc, Weak},
     time::Instant,
 };
@@ -360,24 +360,22 @@ const fn render_cause(cause: gpui::ViewRenderCause) -> ViewRenderCause {
 ///
 /// This runs when a client reads the tree rather than during the draw, so its
 /// cost never lands inside a measured frame.
+///
+/// A node is visible when it has a size and neither it nor an ancestor is
+/// hidden, and some of it shows inside its scroll containers; that part is its
+/// `visible_bounds`, so pointer actions never aim at a clipped point.
 pub(crate) fn semantic_nodes(frame: &AccessibilityFrame) -> Vec<UiNode> {
     let mut nodes = frame.nodes().map(|(_, node)| node).collect::<Vec<_>>();
     nodes.sort_by(|left, right| left.path().cmp(right.path()));
-    let mut hidden = HashSet::<String>::new();
+    let index: HashMap<&str, &FrameNode> = nodes.iter().map(|node| (node.id(), *node)).collect();
     nodes
         .into_iter()
         .map(|node| {
-            let inherited_hidden = node.parent().is_some_and(|parent| hidden.contains(parent));
-            let own_hidden = frame
-                .accessibility_node(node)
-                .is_some_and(accesskit::Node::is_hidden);
             let mut result = to_node(frame, node);
-            if inherited_hidden {
-                result.state.visible = false;
-            }
-            if inherited_hidden || own_hidden {
-                hidden.insert(result.id.clone());
-            }
+            let shown =
+                visible_node_rect(frame, &index, node.id()).filter(|_| result.state.visible);
+            result.state.visible = shown.is_some();
+            result.visible_bounds = shown;
             result
         })
         .collect()
@@ -435,6 +433,7 @@ fn to_node(frame: &AccessibilityFrame, rendered: &FrameNode) -> UiNode {
             .and_then(accesskit::Node::description)
             .map(ToOwned::to_owned),
         bounds: Some(rect_from_gpui(rendered.bounds())),
+        visible_bounds: None,
         state: NodeState {
             visible: !rendered.bounds().is_empty()
                 && !accessible.is_some_and(accesskit::Node::is_hidden),
@@ -862,6 +861,71 @@ mod tests {
                 .as_ref()
                 .is_some_and(|value| value.value.is_empty())
         );
+    }
+
+    /// A 50-pixel-high scroll container whose 20-pixel child starts `top`
+    /// pixels down its content.
+    struct ClippedFixture {
+        top: f32,
+    }
+
+    impl Render for ClippedFixture {
+        fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+            div().id("root").size_full().child(
+                div()
+                    .id("list")
+                    .absolute()
+                    .top(px(200.))
+                    .left(px(0.))
+                    .w(px(100.))
+                    .h(px(50.))
+                    .overflow_y_scroll()
+                    .child(
+                        div()
+                            .id("row-action")
+                            .role(Role::Button)
+                            .mt(px(self.top))
+                            .w(px(40.))
+                            .h(px(20.)),
+                    ),
+            )
+        }
+    }
+
+    #[gpui::test]
+    fn scroll_containers_clip_what_is_visible(cx: &mut TestAppContext) {
+        let automation = Automation::isolated();
+        let for_window = automation.clone();
+        let (view, visual) = cx.add_window_view(move |window, _| {
+            for_window.attach(window);
+            ClippedFixture { top: 10. }
+        });
+        visual.run_until_parked();
+        let action = |automation: &Automation| automation.snapshot().nodes["row-action"].clone();
+
+        let shown = action(&automation);
+        assert!(shown.state.visible);
+        assert_eq!(shown.visible_bounds, shown.bounds, "nothing is clipped");
+
+        view.update(visual, |view, cx| {
+            view.top = 40.;
+            cx.notify();
+        });
+        visual.run_until_parked();
+        let half = action(&automation);
+        assert!(half.state.visible);
+        let visible = half.visible_bounds.map(|rect| (rect.y, rect.height));
+        assert_eq!(visible, Some((240., 10.)), "only the part inside the list");
+
+        view.update(visual, |view, cx| {
+            view.top = 500.;
+            cx.notify();
+        });
+        visual.run_until_parked();
+        let away = action(&automation);
+        assert!(!away.state.visible, "scrolled out of view");
+        assert_eq!(away.visible_bounds, None);
+        assert!(away.bounds.is_some_and(|bounds| bounds.y >= 700.));
     }
 
     struct RedactedChildFixture;

@@ -1346,6 +1346,7 @@ mod tests {
             label: None,
             description: None,
             bounds: None,
+            visible_bounds: None,
             state: NodeState::default(),
             actions: Vec::new(),
             text: None,
